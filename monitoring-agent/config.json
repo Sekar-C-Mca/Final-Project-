@@ -1,0 +1,50 @@
+{
+  "api_url": "http://localhost:8000/api",
+  "project_id": "default_project",
+  "watch_patterns": [
+    "*.py",
+    "*.js",
+    "*.jsx",
+    "*.ts",
+    "*.tsx",
+    "*.java",
+    "*.cpp",
+    "*.c",
+    "*.h",
+    "*.cs",
+    "*.php",
+    "*.rb",
+    "*.go",
+    "*.rs"
+  ],
+  "ignore_patterns": [
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "*.pyc",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".next",
+    ".cache",
+    "*.min.js",
+    "*.bundle.js",
+    "coverage",
+    "target",
+    "bin",
+    "obj",
+    ".vscode",
+    ".idea",
+    "*.log",
+    ".DS_Store"
+  ],
+  "analysis_trigger": "on_save",
+  "debounce_seconds": 2,
+  "max_file_size_mb": 1,
+  "enable_notifications": true,
+  "notification_threshold": {
+    "high_risk_count": 3,
+    "analysis_interval_minutes": 5
+  }
+}

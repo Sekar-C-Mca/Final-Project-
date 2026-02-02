@@ -1,0 +1,10 @@
+#!/bin/sh
+'''exec' "/media/sekar/3c35492e-e643-4f72-ad34-0465e2ee8b25/Final Year Project/python-ai/venv/bin/python3" "$0" "$@"
+' '''
+# -*- coding: utf-8 -*-
+import re
+import sys
+from charset_normalizer.cli import cli_detect
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(cli_detect())

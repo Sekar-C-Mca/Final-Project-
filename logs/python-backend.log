@@ -1,0 +1,20 @@
+INFO:     Will watch for changes in these directories: ['/media/sekar/3c35492e-e643-4f72-ad34-0465e2ee8b25/Final Year Project/python-ai']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [4703] using StatReload
+INFO:     Started server process [4706]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✓ MongoDB connected successfully
+⚠ No trained model found. Please train a model first.
+============================================================
+🚀 Predictive Risk Evaluation API Starting...
+============================================================
+📊 MongoDB Database: risk_evaluation
+🔗 CORS Origins: ['http://localhost:3000', 'http://localhost:5173']
+📁 Model Directory: app/models/saved_models/
+============================================================
+INFO:     127.0.0.1:39538 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39542 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60384 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41096 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34768 - "GET / HTTP/1.1" 200 OK
