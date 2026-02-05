@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, User, BarChart3, Brain, Code, Download } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
 import './Navbar.css';
 
 const Navbar = () => {
@@ -21,8 +22,13 @@ const Navbar = () => {
                 </Link>
 
                 <div className="navbar-menu">
+                    <Link to="/deploy-script" className="navbar-link">
+                        <Download size={18} />
+                        Deploy Script
+                    </Link>
                     <Link to="/dashboard" className="navbar-link">
-                        📊 Dashboard
+                        <BarChart3 size={18} />
+                        Dashboard
                     </Link>
                     <Link to="/ml-training" className="navbar-link">
                         <Brain size={18} />
@@ -32,13 +38,10 @@ const Navbar = () => {
                         <Code size={18} />
                         Feature Extraction
                     </Link>
-                    <Link to="/deploy-script" className="navbar-link">
-                        <Download size={18} />
-                        Deploy Script
-                    </Link>
                 </div>
 
                 <div className="navbar-right">
+                    <ThemeToggle />
                     <div className="navbar-user">
                         <User size={18} />
                         <span>{user?.name || 'User'}</span>

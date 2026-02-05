@@ -12,7 +12,8 @@ const execAsync = promisify(exec);
 
 // Storage for active monitoring sessions
 const activeMonitors = new Map();
-const monitorUpdates = new Map();
+const monitorUpdates = new Map(); // Current pending updates for each agent
+const sentUpdateIndices = new Map(); // Track which updates have been sent to avoid loss
 
 // All routes are protected
 router.use(protect);
@@ -211,6 +212,60 @@ router.post('/start-realtime-monitor', [
         monitorUpdates.set(agentId, []);
         
         let processStarted = false;
+        let bufferLines = []; // Buffer to accumulate related lines
+        
+        // Helper function to parse metrics from consecutive output lines
+        const parseMetricsSection = (lines) => {
+            const metrics = {};
+            for (const line of lines) {
+                // LOC: X
+                if (line.includes('└─ LOC:')) {
+                    const match = line.match(/LOC:\s*(\d+)/);
+                    if (match) metrics.loc = parseInt(match[1]);
+                }
+                // COMPLEXITY: X.XX
+                else if (line.includes('└─ COMPLEXITY:')) {
+                    const match = line.match(/COMPLEXITY:\s*([\d.]+)/);
+                    if (match) metrics.complexity = parseFloat(match[1]);
+                }
+                // DEPENDENCIES: X
+                else if (line.includes('└─ DEPENDENCIES:')) {
+                    const match = line.match(/DEPENDENCIES:\s*(\d+)/);
+                    if (match) metrics.dependencies = parseInt(match[1]);
+                }
+                // FUNCTIONS: X
+                else if (line.includes('└─ FUNCTIONS:')) {
+                    const match = line.match(/FUNCTIONS:\s*(\d+)/);
+                    if (match) metrics.functions = parseInt(match[1]);
+                }
+                // CLASSES: X
+                else if (line.includes('└─ CLASSES:')) {
+                    const match = line.match(/CLASSES:\s*(\d+)/);
+                    if (match) metrics.classes = parseInt(match[1]);
+                }
+                // COMMENTS: X
+                else if (line.includes('└─ COMMENTS:')) {
+                    const match = line.match(/COMMENTS:\s*(\d+)/);
+                    if (match) metrics.comments = parseInt(match[1]);
+                }
+                // COMPLEXITY PER LOC: X.XX
+                else if (line.includes('└─ COMPLEXITY PER LOC:')) {
+                    const match = line.match(/COMPLEXITY PER LOC:\s*([\d.]+)/);
+                    if (match) metrics.complexity_per_loc = parseFloat(match[1]);
+                }
+                // COMMENT RATIO: X.XX
+                else if (line.includes('└─ COMMENT RATIO:')) {
+                    const match = line.match(/COMMENT RATIO:\s*([\d.]+)/);
+                    if (match) metrics.comment_ratio = parseFloat(match[1]);
+                }
+                // FUNCTIONS PER CLASS: X.XX
+                else if (line.includes('└─ FUNCTIONS PER CLASS:')) {
+                    const match = line.match(/FUNCTIONS PER CLASS:\s*([\d.]+)/);
+                    if (match) metrics.functions_per_class = parseFloat(match[1]);
+                }
+            }
+            return Object.keys(metrics).length > 0 ? metrics : null;
+        };
         
         // Handle monitor output - parse both JSON and console output
         monitorProcess.stdout.on('data', (data) => {
@@ -221,11 +276,24 @@ router.post('/start-realtime-monitor', [
             
             try {
                 const lines = data.toString().split('\n').filter(line => line.trim());
-                lines.forEach(line => {
+                const updates = monitorUpdates.get(agentId) || [];
+                
+                lines.forEach((line, idx) => {
                     console.log(`Monitor Output: ${line}`); // Enhanced logging
                     
-                    // Convert any output to update format for frontend display
-                    const updates = monitorUpdates.get(agentId) || [];
+                    // Accumulate lines that contain metrics
+                    if (line.includes('└─')) {
+                        bufferLines.push(line);
+                    }
+                    
+                    // When we hit end of metrics section, parse them
+                    if (bufferLines.length > 0 && !line.includes('└─') && line.trim() !== '') {
+                        const metrics = parseMetricsSection(bufferLines);
+                        if (metrics) {
+                            console.log(`📊 Parsed metrics:`, JSON.stringify(metrics));
+                        }
+                        bufferLines = [];
+                    }
                     
                     // Try to parse as JSON first
                     try {
@@ -240,13 +308,23 @@ router.post('/start-realtime-monitor', [
                         }
                     } catch (parseError) {
                         // Not JSON, treat as console output - convert to structured format
-                        updates.push({
+                        const messageObj = {
                             type: 'console_output',
                             message: line,
                             timestamp: new Date().toISOString(),
                             agentId,
                             deployedLocation: absoluteFolderPath
-                        });
+                        };
+                        
+                        // If this line contains metrics, attach them
+                        if (line.includes('EXTRACTED FEATURES') && bufferLines.length > 0) {
+                            const metrics = parseMetricsSection(bufferLines);
+                            if (metrics) {
+                                messageObj.metrics = metrics;
+                            }
+                        }
+                        
+                        updates.push(messageObj);
                     }
                     
                     monitorUpdates.set(agentId, updates.slice(-50)); // Keep last 50 updates
@@ -337,12 +415,25 @@ router.post('/start-realtime-monitor', [
 router.get('/monitor-updates/:agentId', (req, res) => {
     try {
         const { agentId } = req.params;
-        const updates = monitorUpdates.get(agentId) || [];
+        const allUpdates = monitorUpdates.get(agentId) || [];
+        const lastSentIndex = sentUpdateIndices.get(agentId) || -1;
         
-        // Clear updates after sending to prevent duplicate sends
-        monitorUpdates.set(agentId, []);
+        // Get only new updates since last poll (prevents data loss)
+        const newUpdates = allUpdates.slice(lastSentIndex + 1);
         
-        res.status(200).json(updates);
+        // Update tracking to mark these as sent
+        // Keep updates in buffer but track what we've sent
+        sentUpdateIndices.set(agentId, allUpdates.length - 1);
+        
+        // Log for debugging
+        if (newUpdates.length > 0) {
+            console.log(`📤 Sent ${newUpdates.length} updates to frontend for agent ${agentId}`);
+            newUpdates.forEach((update, idx) => {
+                console.log(`   [${lastSentIndex + idx + 1}] ${update.type}: ${update.message?.substring(0, 50) || 'N/A'}`);
+            });
+        }
+        
+        res.status(200).json(newUpdates);
     } catch (error) {
         console.error('Error getting monitor updates:', error);
         res.status(500).json({

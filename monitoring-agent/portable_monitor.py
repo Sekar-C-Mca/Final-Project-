@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import time
+import re
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -61,8 +62,175 @@ class PortableFileMonitor(FileSystemEventHandler):
         ext = os.path.splitext(file_path)[1].lower()
         return ext_map.get(ext, 'unknown')
     
+    def detect_language_mismatch(self, file_path: str, content: str) -> tuple:
+        """Detect if file content doesn't match expected language from extension
+        Returns: (has_mismatch: bool, detected_language: str, mismatch_warning: str)
+        """
+        expected_lang = self.get_language(file_path)
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        # Language indicators - specific patterns
+        python_indicators = ['def ', 'import ', 'from ', 'class ', 'print(', '__init__', 'if __name__', 'self.', '= ']
+        cpp_indicators = ['#include', 'int main', 'std::', 'void ', 'return 0;', 'using namespace', '#include <', '<<', '>>']
+        c_indicators = ['#include', 'int main', 'printf(', 'scanf(', 'malloc(', 'void main', 'stdlib.h']
+        java_indicators = ['public class', 'public static', 'import java', 'System.out.println', 'extends', 'implements']
+        js_indicators = ['function ', 'const ', 'let ', 'var ', 'console.log', 'export ', '=>']
+        
+        content_lower = content.lower()
+        
+        # Count indicators for each language
+        python_count = sum(1 for ind in python_indicators if ind.lower() in content_lower)
+        cpp_count = sum(1 for ind in cpp_indicators if ind.lower() in content_lower)
+        c_count = sum(1 for ind in c_indicators if ind.lower() in content_lower)
+        java_count = sum(1 for ind in java_indicators if ind.lower() in content_lower)
+        js_count = sum(1 for ind in js_indicators if ind.lower() in content_lower)
+        
+        # Determine detected language by highest count
+        counts = {
+            'python': python_count,
+            'cpp': cpp_count,
+            'c': c_count,
+            'java': java_count,
+            'javascript': js_count
+        }
+        
+        # Find the language with most matches
+        detected_lang = None
+        max_count = max(counts.values())
+        if max_count >= 1:  # At least 1 indicator must match
+            detected_lang = max(counts, key=counts.get)
+        
+        # Check for mismatch - be sensitive to Python in C++ files
+        has_mismatch = False
+        warning = ""
+        
+        # Special handling: if Python detected in C/C++ file, it's a mismatch even with 1 indicator
+        if expected_lang in ['cpp', 'c'] and detected_lang == 'python' and python_count >= 1:
+            has_mismatch = True
+            warning = f"⚠️  LANGUAGE MISMATCH DETECTED: Python code found in .{file_ext[1:] if file_ext else 'unknown'} file!"
+        elif detected_lang and detected_lang != expected_lang and max_count >= 2:
+            has_mismatch = True
+            warning = f"⚠️  LANGUAGE MISMATCH: File is .{file_ext[1:] if file_ext else 'unknown'} but contains {detected_lang.upper()} code!"
+        
+        return has_mismatch, detected_lang or expected_lang, warning
+    
+    def extract_metrics(self, file_path: str, content: str) -> dict:
+        """Extract comprehensive code metrics from file"""
+        lines = content.split('\n')
+        
+        # Count lines of code and comments
+        loc = 0
+        comments = 0
+        in_block_comment = False
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines
+            if not stripped:
+                continue
+            
+            # Handle block comments (Python style: """ or ''', JavaScript/C style: /* */)
+            if '"""' in stripped or "'''" in stripped:
+                in_block_comment = not in_block_comment
+                comments += 1
+                continue
+            
+            if '/*' in stripped:
+                in_block_comment = True
+            if in_block_comment or stripped.startswith('/*') or stripped.startswith('*'):
+                comments += 1
+                if '*/' in stripped:
+                    in_block_comment = False
+                continue
+            
+            # Count single-line comments (works across multiple languages)
+            if stripped.startswith('#') or stripped.startswith('//'):
+                comments += 1
+                continue
+            
+            # If we reach here, it's a line of code
+            loc += 1
+        
+        # Ensure we have at least 1 LOC
+        loc = max(1, loc)
+        
+        # Count functions (language-agnostic patterns)
+        function_patterns = [
+            r'def\s+\w+\s*\(',  # Python: def function()
+            r'function\s+\w+\s*\(',  # JavaScript: function name()
+            r'async\s+function\s+\w+\s*\(',  # JavaScript async
+            r'=>',  # Arrow functions
+            r'void\s+\w+\s*\(',  # C/C++/Java: void name()
+            r'int\s+\w+\s*\(',  # C/C++/Java: int name()
+            r'public\s+\w+\s+\w+\s*\(',  # Java methods
+            r'private\s+\w+\s+\w+\s*\(',  # Java methods
+        ]
+        
+        functions = 0
+        for pattern in function_patterns:
+            functions += len(re.findall(pattern, content))
+        
+        # Count classes
+        class_patterns = [
+            r'class\s+\w+',  # Python/JavaScript: class Name
+            r'struct\s+\w+',  # C/C++: struct Name
+            r'interface\s+\w+',  # Java/TypeScript: interface Name
+        ]
+        
+        classes = 0
+        for pattern in class_patterns:
+            classes += len(re.findall(pattern, content))
+        
+        # Count dependencies/imports
+        import_patterns = [
+            r'import\s+',  # Python/JavaScript: import
+            r'require\s*\(',  # JavaScript: require()
+            r'#include\s*[<"]',  # C/C++: #include
+            r'using\s+',  # C#/Java: using/using namespace
+        ]
+        
+        dependencies = 0
+        for pattern in import_patterns:
+            dependencies += len(re.findall(pattern, content))
+        
+        # Estimate cyclomatic complexity (simple approach)
+        # Count decision points: if, else, for, while, switch, catch, etc.
+        complexity_keywords = [
+            r'\bif\b', r'\belse\b', r'\belif\b',
+            r'\bfor\b', r'\bwhile\b', r'\bdo\b',
+            r'\bswitch\b', r'\bcase\b',
+            r'\bcatch\b', r'\bfinally\b',
+            r'&&', r'\|\|', r'\?'  # Logical operators
+        ]
+        
+        complexity = 1  # Base complexity
+        for pattern in complexity_keywords:
+            complexity += len(re.findall(pattern, content))
+        
+        # Average complexity per function (avoid division by zero)
+        complexity = complexity / max(1, functions) if functions > 0 else complexity / max(1, loc / 10)
+        complexity = round(complexity, 2)
+        
+        # Calculate derived metrics
+        complexity_per_loc = round(complexity / max(1, loc), 2)
+        comment_ratio = round(comments / max(1, loc), 2)
+        functions_per_class = round(functions / max(1, classes), 2) if classes > 0 else 0
+        
+        return {
+            'loc': loc,
+            'complexity': complexity,
+            'dependencies': dependencies,
+            'functions': functions,
+            'classes': classes,
+            'comments': comments,
+            'complexity_per_loc': complexity_per_loc,
+            'comment_ratio': comment_ratio,
+            'functions_per_class': functions_per_class
+        }
+    
     def analyze_file(self, file_path: str):
-        """Simple file analysis"""
+        """Simple file analysis with comprehensive error handling"""
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
@@ -70,10 +238,21 @@ class PortableFileMonitor(FileSystemEventHandler):
             relative_path = os.path.relpath(file_path, self.watch_dir)
             language = self.get_language(file_path)
             
-            # Simple risk assessment based on content
-            lines = content.split('\n')
-            line_count = len(lines)
+            # Detect language mismatch
+            has_mismatch, detected_lang, mismatch_warning = self.detect_language_mismatch(file_path, content)
             
+            # If mismatch detected, show warning and increase risk
+            risk_boost = 0
+            if has_mismatch:
+                print(f"   {mismatch_warning}")
+                risk_boost = 2  # Increase risk score for mismatches
+            
+            # Extract comprehensive metrics
+            metrics = self.extract_metrics(file_path, content)
+            
+            lines = content.split('\n')
+            
+            # Simple risk assessment based on content patterns
             risk_indicators = [
                 'eval(', 'exec(', 'system(', 'shell_exec(',
                 'sql', 'SELECT', 'INSERT', 'DELETE', 'UPDATE',
@@ -87,6 +266,9 @@ class PortableFileMonitor(FileSystemEventHandler):
                 for indicator in risk_indicators:
                     if indicator.lower() in line_lower:
                         risk_score += 1
+            
+            # Add risk boost for language mismatch
+            risk_score += risk_boost
             
             # Determine risk level
             if risk_score >= 5:
@@ -103,26 +285,47 @@ class PortableFileMonitor(FileSystemEventHandler):
             timestamp = datetime.now().strftime('%H:%M:%S')
             print(f"[{timestamp}] 📝 File changed: {relative_path}")
             
-            risk_colors = {'low': '🟢', 'medium': '🟡', 'high': '🔴'}
-            print(f"   {risk_colors[risk_level]} RISK: {risk_level.upper()} ({confidence:.0%} confidence)")
-            print(f"   📊 Lines: {line_count} | Language: {language}")
+            # Only show risk level if NO mismatch detected
+            if not has_mismatch:
+                risk_colors = {'low': '🟢', 'medium': '🟡', 'high': '🔴'}
+                print(f"   {risk_colors[risk_level]} RISK: {risk_level.upper()} ({confidence:.0%} confidence)")
+            else:
+                # For mismatch files, show different format
+                print(f"   ⚠️  MISMATCH DETECTED - Fallback Analysis")
             
-            if risk_level != 'low':
+            # Display extracted features
+            print(f"\n   📊 EXTRACTED FEATURES:")
+            print(f"   └─ LOC: {metrics['loc']}")
+            print(f"   └─ COMPLEXITY: {metrics['complexity']}")
+            print(f"   └─ DEPENDENCIES: {metrics['dependencies']}")
+            print(f"   └─ FUNCTIONS: {metrics['functions']}")
+            print(f"   └─ CLASSES: {metrics['classes']}")
+            print(f"   └─ COMMENTS: {metrics['comments']}")
+            print(f"   └─ COMPLEXITY PER LOC: {metrics['complexity_per_loc']}")
+            print(f"   └─ COMMENT RATIO: {metrics['comment_ratio']}")
+            print(f"   └─ FUNCTIONS PER CLASS: {metrics['functions_per_class']}")
+            
+            if has_mismatch:
+                print(f"\n   💡 Recommendation: Review language mismatch - file may be in wrong folder")
+            elif risk_level != 'low':
                 recommendations = [
                     "Review for security vulnerabilities",
-                    "Add input validation",
-                    "Implement proper error handling",
-                    "Add unit tests",
-                    "Document security considerations"
+                    "Check language compatibility",
+                    "Verify file is in correct directory",
+                    "Add proper type hints/declarations",
+                    "Implement error handling",
                 ]
                 if risk_score > 0:
-                    print(f"   💡 Recommendation: {recommendations[min(risk_score-1, len(recommendations)-1)]}")
+                    print(f"\n   💡 Recommendation: {recommendations[min(risk_score-1, len(recommendations)-1)]}")
             
             print()  # Add spacing
             self.total_analyzed += 1
             
         except Exception as e:
-            print(f"❌ Error analyzing {file_path}: {str(e)}")
+            # Graceful error handling - log but don't crash
+            # This handles edge cases like binary files, encoding issues, or unexpected formats
+            relative_path = os.path.relpath(file_path, self.watch_dir)
+            print(f"⚠️  Could not analyze {relative_path}: {type(e).__name__}")
     
     def on_modified(self, event):
         """Handle file modification events"""

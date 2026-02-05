@@ -3,21 +3,21 @@
     align-items: center;
     gap: 8px;
     font-weight: bold;
-    color: #2563eb;
+    color: var(--primary);
     text-decoration: none;
 }
 
 .logo-text {
     font-size: 1.25rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
 
 .logo svg {
-    color: #2563eb;
+    color: var(--primary);
 }
 
 .logo:hover {
@@ -25,20 +25,18 @@
     transition: opacity 0.2s ease;
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    .logo {
-        color: #60a5fa;
-    }
-    
-    .logo-text {
-        background: linear-gradient(135deg, #60a5fa, #93c5fd);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .logo svg {
-        color: #60a5fa;
-    }
+/* Footer logo override - always light colors */
+.footer .logo {
+    color: #60a5fa;
+}
+
+.footer .logo-text {
+    background: linear-gradient(135deg, #60a5fa, #93c5fd);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.footer .logo svg {
+    color: #60a5fa;
 }

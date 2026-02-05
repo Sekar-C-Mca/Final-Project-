@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
 import './Auth.css';
 
 const Login = () => {
@@ -32,6 +33,9 @@ const Login = () => {
 
     return (
         <div className="auth-container">
+            <div className="auth-theme-toggle">
+                <ThemeToggle />
+            </div>
             <div className="auth-card fade-in">
                 <div className="auth-header">
                     <h1>Welcome Back</h1>

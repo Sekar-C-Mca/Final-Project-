@@ -19,6 +19,7 @@ import {
     Star
 } from 'lucide-react';
 import Logo from '../components/Logo';
+import ThemeToggle from '../components/ThemeToggle';
 import './LandingPage.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -134,16 +135,11 @@ const LandingPage = () => {
     return (
         <div className="landing-page">
             {/* Navigation */}
-            <nav className="navbar">
+            <nav className="navbar landing-navbar">
                 <div className="navbar-container">
                     <Logo />
-                    <div className="navbar-menu">
-                        <a href="#features" className="nav-link">Features</a>
-                        <a href="#how-it-works" className="nav-link">How it Works</a>
-                        <a href="#pricing" className="nav-link">Pricing</a>
-                        <a href="#docs" className="nav-link">Documentation</a>
-                    </div>
                     <div className="navbar-actions">
+                        <ThemeToggle />
                         <Link to="/login" className="btn btn-ghost">
                             Sign In
                         </Link>
@@ -174,20 +170,6 @@ const LandingPage = () => {
                                 <BarChart3 size={20} />
                                 View Demo
                             </Link>
-                        </div>
-                        <div className="hero-badges">
-                            <div className="badge">
-                                <CheckCircle size={16} />
-                                <span>Free 14-day trial</span>
-                            </div>
-                            <div className="badge">
-                                <CheckCircle size={16} />
-                                <span>No credit card required</span>
-                            </div>
-                            <div className="badge">
-                                <CheckCircle size={16} />
-                                <span>Setup in 5 minutes</span>
-                            </div>
                         </div>
                     </div>
                     

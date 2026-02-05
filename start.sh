@@ -104,6 +104,13 @@ check_requirements() {
         echo -e "${YELLOW}   Please ensure portable_monitor.py exists in monitoring-agent directory${NC}"
     fi
     
+    # Check Python AI feature extraction (for code analysis)
+    if [ -f "$PROJECT_ROOT/python-ai/app/preprocessing/feature_extraction.py" ]; then
+        echo -e "${GREEN}✅ Feature extraction module found${NC}"
+    else
+        echo -e "${RED}❌ Feature extraction module not found${NC}"
+    fi
+    
     # Check system dependencies for monitoring
     if python3 -c "import watchdog" 2>/dev/null; then
         echo -e "${GREEN}✅ Python watchdog package installed${NC}"
@@ -193,9 +200,12 @@ start_services() {
     echo -e "${BLUE}2. Starting Express Backend (Port 5000)...${NC}"
     cd "$PROJECT_ROOT/backend"
     if [ -f "package.json" ]; then
-        npm run dev > ../logs/express-backend.log 2>&1 &
+        # Use npm start (production) instead of dev for stability
+        npm start > ../logs/express-backend.log 2>&1 &
         EXPRESS_PID=$!
         echo -e "${GREEN}   ✅ Express Backend started (PID: $EXPRESS_PID)${NC}"
+        echo -e "${CYAN}      • Polling fix for frontend monitoring enabled${NC}"
+        echo -e "${CYAN}      • Index-based update tracking active${NC}"
     else
         echo -e "${RED}   ❌ Failed to start Express Backend - package.json not found${NC}"
         exit 1
@@ -249,6 +259,12 @@ show_status() {
     echo "  ⚡ Risk Analysis: HIGH, MEDIUM, LOW levels"
     echo "  🐍 Dependencies: python3-watchdog installed"
     echo ""
+    echo -e "${CYAN}✨ Recent Fixes:${NC}"
+    echo "  • ✅ Frontend monitoring console - polling fix applied"
+    echo "  • ✅ Language mismatch handling - 3-tier error handling"
+    echo "  • ✅ Code metrics accuracy - LOC counting fixed"
+    echo "  • ✅ Comment detection - All language styles supported"
+    echo ""
     echo -e "${YELLOW}💡 Tips:${NC}"
     echo "  • Press Ctrl+C to stop all services"
     echo "  • Monitor logs: tail -f logs/*.log"
@@ -271,6 +287,31 @@ main() {
     check_mongodb
     start_services
     show_status
+    
+    # Verify services started correctly
+    echo -e "${CYAN}🔄 Verifying service startup...${NC}"
+    sleep 2
+    
+    # Check services are responsive
+    if curl -s http://localhost:3000 > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Frontend responsive on port 3000${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Frontend may still be loading...${NC}"
+    fi
+    
+    if curl -s http://localhost:5000 > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Backend responsive on port 5000${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Backend may still be initializing...${NC}"
+    fi
+    
+    if curl -s http://localhost:8000 > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ ML Backend responsive on port 8000${NC}"
+    else
+        echo -e "${YELLOW}⚠️  ML Backend may still be starting...${NC}"
+    fi
+    
+    echo ""
     
     # Setup signal handlers
     trap "echo -e '\n${YELLOW}🛑 Stopping all services...${NC}'; kill $PYTHON_PID $EXPRESS_PID $REACT_PID 2>/dev/null; echo -e '${GREEN}✅ All services stopped${NC}'; exit 0" INT TERM

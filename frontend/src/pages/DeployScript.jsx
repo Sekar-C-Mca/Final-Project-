@@ -529,11 +529,15 @@ const DeployScript = () => {
     const startPollingForUpdates = (agentId) => {
         // Store agentId for reference
         window.currentAgentId = agentId;
+        console.log(`✅ Starting polling for agentId: ${agentId}`);
+        
+        let missedPollCount = 0;
         
         const pollInterval = setInterval(async () => {
             // Check if polling should continue using window reference (avoids stale closure)
             if (!window.monitoringInterval) {
                 clearInterval(pollInterval);
+                console.log('🛑 Polling stopped - monitoring ended');
                 return;
             }
             
@@ -546,8 +550,15 @@ const DeployScript = () => {
                 
                 if (response.ok) {
                     const updates = await response.json();
+                    missedPollCount = 0; // Reset on successful poll
                     
-                    updates.forEach(update => {
+                    if (updates && updates.length > 0) {
+                        console.log(`📥 Received ${updates.length} updates from backend`);
+                    }
+                    
+                    updates.forEach((update, idx) => {
+                        console.log(`   Update ${idx + 1}: type=${update.type}, message=${update.message?.substring(0, 50) || 'N/A'}`);
+                        
                         if (update.type === 'console_output') {
                             // Handle console output from portable monitor - display all meaningful messages
                             const message = update.message;
@@ -580,13 +591,52 @@ const DeployScript = () => {
                             else if (message.includes('Error') || message.includes('❌')) {
                                 color = 'error';
                             }
+                            // Mismatch messages
+                            else if (message.includes('MISMATCH') || message.includes('⚠️')) {
+                                color = 'warning';
+                            }
                             // Skip separator lines
                             else if (message.startsWith('==')) {
                                 return;
                             }
                             
+                            console.log(`   ✨ Adding to output: ${message.substring(0, 60)}...`);
                             // Add the message to output
                             addToOutput(message, color);
+                            
+                            // If metrics are available in the update, parse and display them
+                            if (update.metrics && Object.keys(update.metrics).length > 0) {
+                                const m = update.metrics;
+                                
+                                // Display metrics in a formatted way
+                                if (m.loc !== undefined) {
+                                    addToOutput(`   📊 LOC: ${m.loc}`, 'info');
+                                }
+                                if (m.complexity !== undefined) {
+                                    addToOutput(`       COMPLEXITY: ${m.complexity}`, 'info');
+                                }
+                                if (m.dependencies !== undefined) {
+                                    addToOutput(`       DEPENDENCIES: ${m.dependencies}`, 'info');
+                                }
+                                if (m.functions !== undefined) {
+                                    addToOutput(`       FUNCTIONS: ${m.functions}`, 'info');
+                                }
+                                if (m.classes !== undefined) {
+                                    addToOutput(`       CLASSES: ${m.classes}`, 'info');
+                                }
+                                if (m.comments !== undefined) {
+                                    addToOutput(`       COMMENTS: ${m.comments}`, 'info');
+                                }
+                                if (m.complexity_per_loc !== undefined) {
+                                    addToOutput(`       COMPLEXITY/LOC: ${m.complexity_per_loc}`, 'info');
+                                }
+                                if (m.comment_ratio !== undefined) {
+                                    addToOutput(`       COMMENT_RATIO: ${m.comment_ratio}`, 'info');
+                                }
+                                if (m.functions_per_class !== undefined) {
+                                    addToOutput(`       FUNCTIONS/CLASS: ${m.functions_per_class}`, 'info');
+                                }
+                            }
                             
                             // Update stats if it's a risk analysis result
                             if (message.includes('RISK:')) {
@@ -628,14 +678,33 @@ const DeployScript = () => {
                             addToOutput(`⏹️ Monitor stopped: ${update.message}`, 'warning');
                         }
                     });
+                } else {
+                    missedPollCount++;
+                    console.warn(`⚠️ Poll failed - Status ${response.status} (attempt ${missedPollCount})`);
+                    
+                    if (missedPollCount > 10) {
+                        console.error('❌ Too many failed polls - stopping monitoring');
+                        clearInterval(pollInterval);
+                        window.monitoringInterval = null;
+                        addToOutput('❌ Lost connection to monitoring agent', 'error');
+                    }
                 }
             } catch (error) {
-                console.error('Error polling updates:', error);
+                missedPollCount++;
+                console.error(`❌ Polling error (attempt ${missedPollCount}):`, error.message);
+                
+                if (missedPollCount > 10) {
+                    console.error('❌ Too many failed polls - stopping monitoring');
+                    clearInterval(pollInterval);
+                    window.monitoringInterval = null;
+                    addToOutput(`❌ Polling failed: ${error.message}`, 'error');
+                }
             }
         }, 1500); // Poll every 1.5 seconds for more responsive updates
         
         // Store interval reference for cleanup
         window.monitoringInterval = pollInterval;
+        console.log('✅ Polling interval started');
     };
 
     const stopMonitoring = async () => {
