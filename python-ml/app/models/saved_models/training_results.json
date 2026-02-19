@@ -1,0 +1,42 @@
+{
+  "model_loaded": true,
+  "algorithm": "random_forest",
+  "training_timestamp": "2026-02-19T11:07:40.020963",
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "auc_roc": 1.0
+  },
+  "dataset_info": {
+    "total_samples": 800,
+    "optimized_samples": 400,
+    "unoptimized_samples": 400,
+    "train_size": 640,
+    "test_size": 160,
+    "test_ratio": 0.2
+  },
+  "feature_names": [
+    "LOC",
+    "Complexity",
+    "Dependencies",
+    "Functions",
+    "Classes",
+    "Comments",
+    "Complexity/LOC",
+    "Comment Ratio",
+    "Functions/Class"
+  ],
+  "feature_importance": {
+    "LOC": 0.007735824271254094,
+    "Complexity": 0.3426751025029593,
+    "Dependencies": 0.2739755173669563,
+    "Functions": 0.0494632204400485,
+    "Classes": 0.0,
+    "Comments": 0.009784027353229183,
+    "Complexity/LOC": 0.0004744330161204903,
+    "Comment Ratio": 0.28511576554706947,
+    "Functions/Class": 0.030776109502362647
+  }
+}
