@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { FolderOpen, Play, Square, Terminal, CheckCircle, AlertTriangle, Info, RefreshCw, Download, FileCode, Activity, Zap } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import { useMonitor } from '../context/MonitorContext';
 import './DeployScript.css';
 
 const DeployScript = () => {
+    const { monitorOutput, addToOutput, clearOutput, stats, updateStats } = useMonitor();
+    
     const [selectedFolder, setSelectedFolder] = useState('');
     const [projectName, setProjectName] = useState('');
     const [isMonitoring, setIsMonitoring] = useState(false);
     const [deployStatus, setDeployStatus] = useState('idle'); // idle, deploying, deployed, error
-    const [monitorOutput, setMonitorOutput] = useState([]);
     const [mlBackendStatus, setMlBackendStatus] = useState('unknown');
     const [currentSession, setCurrentSession] = useState(null);
     const [currentDeployment, setCurrentDeployment] = useState(null);
-    const [stats, setStats] = useState({
-        filesAnalyzed: 0,
-        highRiskCount: 0,
-        sessionDuration: 0
-    });
 
     // Check ML backend status
     useEffect(() => {
@@ -385,12 +382,11 @@ const DeployScript = () => {
                     addToOutput('', 'separator'); // Visual separator
                     
                     // Update stats
-                    setStats(prev => ({
-                        ...prev,
-                        filesAnalyzed: prev.filesAnalyzed + 1,
-                        highRiskCount: prev.highRiskCount + (risk.level === 'high' ? 1 : 0),
+                    updateStats({
+                        filesAnalyzed: stats.filesAnalyzed + 1,
+                        highRiskCount: stats.highRiskCount + (risk.level === 'high' ? 1 : 0),
                         sessionDuration: Math.floor((Date.now() - new Date(currentSession?.startTime || Date.now()).getTime()) / 1000)
-                    }));
+                    });
                     
                 }, 1000);
             }, 500);
@@ -508,11 +504,10 @@ const DeployScript = () => {
                     
                     addToOutput('', 'separator');
                     
-                    setStats(prev => ({
-                        ...prev,
-                        filesAnalyzed: prev.filesAnalyzed + 1,
-                        highRiskCount: prev.highRiskCount + (risk === 'high' ? 1 : 0)
-                    }));
+                    updateStats({
+                        filesAnalyzed: stats.filesAnalyzed + 1,
+                        highRiskCount: stats.highRiskCount + (risk === 'high' ? 1 : 0)
+                    });
                     
                     fileIndex++;
                     if (isMonitoring) {
@@ -640,11 +635,10 @@ const DeployScript = () => {
                             
                             // Update stats if it's a risk analysis result
                             if (message.includes('RISK:')) {
-                                setStats(prev => ({
-                                    ...prev,
-                                    filesAnalyzed: prev.filesAnalyzed + 1,
-                                    highRiskCount: prev.highRiskCount + (message.includes('HIGH') ? 1 : 0)
-                                }));
+                                updateStats({
+                                    filesAnalyzed: stats.filesAnalyzed + 1,
+                                    highRiskCount: stats.highRiskCount + (message.includes('HIGH') ? 1 : 0)
+                                });
                             }
                         } else if (update.type === 'file_change' || update.type === 'analysis_result') {
                             // Handle structured JSON updates
@@ -666,11 +660,10 @@ const DeployScript = () => {
                                 }
                                 
                                 // Update stats
-                                setStats(prev => ({
-                                    ...prev,
-                                    filesAnalyzed: prev.filesAnalyzed + 1,
-                                    highRiskCount: prev.highRiskCount + (risk === 'high' ? 1 : 0)
-                                }));
+                                updateStats({
+                                    filesAnalyzed: stats.filesAnalyzed + 1,
+                                    highRiskCount: stats.highRiskCount + (risk === 'high' ? 1 : 0)
+                                });
                             }
                         } else if (update.type === 'error') {
                             addToOutput(`❌ ${update.message}`, 'error');
@@ -755,30 +748,6 @@ const DeployScript = () => {
         } catch (error) {
             addToOutput(`❌ Error stopping monitoring: ${error.message}`, 'error');
         }
-    };
-
-    const addToOutput = (message, type = 'info') => {
-        const timestamp = new Date().toLocaleTimeString();
-        const newEntry = { message, type, timestamp };
-        
-        setMonitorOutput(prev => {
-            const updated = [...prev, newEntry];
-            // Keep only last 100 entries to prevent memory issues
-            return updated.slice(-100);
-        });
-        
-        // Auto-scroll to bottom after state update
-        setTimeout(() => {
-            const outputContainer = document.querySelector('.output-container');
-            if (outputContainer) {
-                outputContainer.scrollTop = outputContainer.scrollHeight;
-            }
-        }, 50);
-    };
-
-    const clearOutput = () => {
-        setMonitorOutput([]);
-        setStats({ filesAnalyzed: 0, highRiskCount: 0, sessionDuration: 0 });
     };
 
     const getStatusIcon = () => {
