@@ -60,7 +60,7 @@ check_requirements() {
     else
         echo -e "${RED}❌ Python virtual environment not found${NC}"
         echo -e "${YELLOW}   Creating virtual environment...${NC}"
-        cd "$PROJECT_ROOT/python-ai"
+        cd "$PROJECT_ROOT/python-ml"
         python3 -m venv venv
         ./venv/bin/pip install -r requirements.txt
         echo -e "${GREEN}✅ Virtual environment created${NC}"
@@ -185,9 +185,9 @@ start_services() {
     
     # Start Python ML Backend
     echo -e "${BLUE}1. Starting Python ML Backend (Port 8000)...${NC}"
-    cd "$PROJECT_ROOT/python-ai"
+    cd "$PROJECT_ROOT/python-ml"
     if [ -f "./venv/bin/python" ]; then
-        ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > ../logs/python-backend.log 2>&1 &
+        ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > "$PROJECT_ROOT/logs/python-backend.log" 2>&1 &
         PYTHON_PID=$!
         echo -e "${GREEN}   ✅ Python ML Backend started (PID: $PYTHON_PID)${NC}"
     else
