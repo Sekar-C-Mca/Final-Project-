@@ -213,13 +213,6 @@ const MLTraining = () => {
             </div>
             <div className="header-buttons">
             <button 
-              className="btn btn-secondary"
-              onClick={() => setShowAlgorithmSelector(true)}
-            >
-              <Settings size={20} />
-              Select Algorithm
-            </button>
-            <button 
               className="btn btn-primary"
               onClick={handleRetrain}
               disabled={retraining}
