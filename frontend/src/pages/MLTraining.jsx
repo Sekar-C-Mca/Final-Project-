@@ -71,7 +71,7 @@ const MLTraining = () => {
       if (!response.ok) throw new Error('Failed to fetch model info');
       const data = await response.json();
       setModelInfo(data);
-      setCurrentAlgorithm(data.current_algorithm || 'random_forest');
+      // Don't override currentAlgorithm - keep user's selection
       setLoading(false);
     } catch (err) {
       console.error('Error fetching model info:', err);
