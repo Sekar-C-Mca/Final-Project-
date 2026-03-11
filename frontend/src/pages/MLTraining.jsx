@@ -233,12 +233,6 @@ const MLTraining = () => {
 
         <div className="algorithm-info-bar">
           <span className="algo-badge">Current Algorithm: <strong>{trainingAlgorithm.toUpperCase()}</strong></span>
-          <button 
-            className="info-link"
-            onClick={() => setShowAlgorithmAnalysis(true)}
-          >
-            View Analysis <ChevronRight size={16} />
-          </button>
         </div>
 
         <div className="tab-navigation">
