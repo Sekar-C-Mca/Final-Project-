@@ -241,16 +241,26 @@ async def select_algorithm(request: Dict):
 
 
 @router.post("/retrain", tags=["Model Management"])
-async def retrain_model(dataset_size: int = 800):
+async def retrain_model(request: Dict):
     """
-    Retrain the Random Forest model with new synthetic data.
+    Retrain the model with new synthetic data.
     
+    Request body:
+    - **algorithm**: Algorithm to use (random_forest, gradient_boosting, xgboost, svm, logistic_regression)
     - **dataset_size**: Total number of samples (split 50-50)
     """
     try:
         global trainer
         
-        print(f"Retraining model with {dataset_size} samples...")
+        algorithm = request.get('algorithm', 'random_forest')
+        dataset_size = request.get('dataset_size', 800)
+        
+        valid_algorithms = ['random_forest', 'gradient_boosting', 'xgboost', 'svm', 'logistic_regression']
+        
+        if algorithm not in valid_algorithms:
+            raise HTTPException(status_code=400, detail=f"Invalid algorithm. Must be one of: {', '.join(valid_algorithms)}")
+        
+        print(f"Retraining {algorithm} model with {dataset_size} samples...")
         
         # Generate new dataset
         generator = DatasetGenerator()
@@ -261,19 +271,19 @@ async def retrain_model(dataset_size: int = 800):
         
         # Train new model
         trainer = ModelTrainer()
-        trainer.train(X_train, y_train, algorithm='random_forest')
+        trainer.train(X_train, y_train, algorithm=algorithm)
         
         # Evaluate
         metrics = trainer.evaluate(X_test, y_test)
         
         # Save model
-        model_path = trainer.save_model("random_forest_model.pkl")
+        model_path = trainer.save_model(f"{algorithm}_model.pkl")
         
         # Save training results
         feature_importance = trainer.get_feature_importance()
         results = {
             "timestamp": datetime.utcnow().isoformat(),
-            "algorithm": "random_forest",
+            "algorithm": algorithm,
             "dataset": {
                 "total_samples": dataset_size,
                 "optimized_samples": dataset_size // 2,
@@ -291,7 +301,8 @@ async def retrain_model(dataset_size: int = 800):
             json.dump(results, f, indent=2)
         
         return JSONResponse(content={
-            "message": "Model retrained successfully",
+            "message": f"Model ({algorithm}) retrained successfully",
+            "algorithm": algorithm,
             "model_path": model_path,
             "metrics": metrics,
             "dataset_info": {
@@ -300,6 +311,8 @@ async def retrain_model(dataset_size: int = 800):
             }
         })
     
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retraining failed: {str(e)}")
 
