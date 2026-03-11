@@ -4,6 +4,7 @@ import { AlertCircle, TrendingUp, Brain, RefreshCw, BarChart3, Zap, Code, CheckC
 import Navbar from '../components/Navbar';
 import AlgorithmSelector from './AlgorithmSelector';
 import AlgorithmAnalysis from './AlgorithmAnalysis';
+import AlgorithmDescription from '../components/AlgorithmDescription';
 import './MLTraining.css';
 
 const MLTraining = () => {
@@ -234,6 +235,8 @@ const MLTraining = () => {
         <div className="algorithm-info-bar">
           <span className="algo-badge">Current Algorithm: <strong>{trainingAlgorithm.toUpperCase()}</strong></span>
         </div>
+
+        <AlgorithmDescription algorithm={currentAlgorithm} />
 
         <div className="tab-navigation">
           <button 

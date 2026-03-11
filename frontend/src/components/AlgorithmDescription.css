@@ -1,0 +1,149 @@
+/* Algorithm Description Panel */
+.algorithm-description-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.algo-description-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--primary);
+}
+
+.algo-description-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.algo-description-header svg {
+  color: var(--primary);
+}
+
+.algo-description-text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: var(--spacing-md);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.algo-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.algo-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.detail-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  color: var(--primary);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.algo-benefits {
+  margin-bottom: var(--spacing-lg);
+}
+
+.algo-benefits h4 {
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 1rem;
+}
+
+.algo-benefits ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.algo-benefits li {
+  color: var(--text-secondary);
+  padding-left: var(--spacing-lg);
+  position: relative;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.algo-benefits li:before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--success);
+  font-weight: bold;
+}
+
+.algo-use-case {
+  background: hsla(220, 90%, 56%, 0.1);
+  border-left: 4px solid var(--primary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+}
+
+.algo-use-case strong {
+  color: var(--text-primary);
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-size: 0.95rem;
+}
+
+.algo-use-case p {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .algorithm-description-panel {
+    padding: var(--spacing-md);
+  }
+
+  .algo-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .algo-description-header h3 {
+    font-size: 1.1rem;
+  }
+}
