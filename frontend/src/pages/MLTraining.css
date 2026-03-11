@@ -50,6 +50,58 @@
     font-size: 1rem;
 }
 
+/* Header Controls */
+.header-controls {
+    display: flex;
+    gap: var(--spacing-lg);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.algorithm-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    background: var(--bg-card);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+}
+
+.algorithm-selector-wrapper label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.algorithm-dropdown {
+    padding: 8px 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    min-width: 200px;
+}
+
+.algorithm-dropdown:hover {
+    background: var(--bg-tertiary);
+}
+
+.algorithm-dropdown:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px hsla(220, 90%, 56%, 0.2);
+}
+
+.header-buttons {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
 .btn {
     padding: var(--spacing-sm) var(--spacing-lg);
     border: none;
@@ -437,7 +489,58 @@
     .predictions-grid {
         grid-template-columns: 1fr;
     }
+}
 
+/* Algorithm Info Bar */
+.algorithm-info-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-primary);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: var(--spacing-lg);
+}
+
+.algo-badge {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.algo-badge strong {
+    color: var(--primary);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.info-link {
+    background: none;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.info-link:hover {
+    background: var(--bg-secondary);
+    gap: 6px;
+}
+
+.algo-value {
+    color: var(--primary) !important;
+    font-weight: 600 !important;
+    text-transform: capitalize;
+}
+
+@media (max-width: 768px) {
     .info-grid {
         grid-template-columns: 1fr;
     }

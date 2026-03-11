@@ -141,6 +141,7 @@ async def get_model_info():
             return JSONResponse(content={
                 "model_loaded": MODEL_LOADED,
                 "algorithm": trainer.algorithm_name,
+                "current_algorithm": trainer.algorithm_name or "random_forest",
                 "status": "No training data available"
             })
         
@@ -150,6 +151,7 @@ async def get_model_info():
         return JSONResponse(content={
             "model_loaded": MODEL_LOADED,
             "algorithm": trainer.algorithm_name,
+            "current_algorithm": trainer.algorithm_name or "random_forest",
             "training_timestamp": training_results.get('timestamp'),
             "metrics": training_results.get('metrics'),
             "dataset_info": training_results.get('dataset'),
@@ -159,6 +161,83 @@ async def get_model_info():
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get model info: {str(e)}")
+
+
+@router.get("/algorithms", tags=["Model Management"])
+async def get_available_algorithms():
+    """Get list of available algorithms"""
+    try:
+        algorithms = {
+            'random_forest': {
+                'name': 'Random Forest',
+                'description': 'Ensemble method using multiple decision trees',
+                'icon': '🌲',
+                'accuracy': 'High',
+                'speed': 'Fast'
+            },
+            'gradient_boosting': {
+                'name': 'Gradient Boosting',
+                'description': 'Sequential tree building with residual correction',
+                'icon': '📈',
+                'accuracy': 'Very High',
+                'speed': 'Medium'
+            },
+            'xgboost': {
+                'name': 'XGBoost',
+                'description': 'Optimized gradient boosting with enhanced performance',
+                'icon': '⚡',
+                'accuracy': 'Very High',
+                'speed': 'Fast'
+            },
+            'svm': {
+                'name': 'SVM',
+                'description': 'Support Vector Machine for classification',
+                'icon': '🎯',
+                'accuracy': 'Medium-High',
+                'speed': 'Medium'
+            },
+            'logistic_regression': {
+                'name': 'Logistic Regression',
+                'description': 'Linear classification model',
+                'icon': '🧠',
+                'accuracy': 'Medium',
+                'speed': 'Very Fast'
+            }
+        }
+        
+        return JSONResponse(content={
+            "algorithms": algorithms,
+            "current_algorithm": trainer.algorithm_name or "random_forest"
+        })
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get algorithms: {str(e)}")
+
+
+@router.post("/select-algorithm", tags=["Model Management"])
+async def select_algorithm(request: Dict):
+    """Select which algorithm to use for training"""
+    try:
+        algorithm = request.get('algorithm', 'random_forest')
+        
+        valid_algorithms = ['random_forest', 'gradient_boosting', 'xgboost', 'svm', 'logistic_regression']
+        
+        if algorithm not in valid_algorithms:
+            raise HTTPException(status_code=400, detail=f"Invalid algorithm. Must be one of: {', '.join(valid_algorithms)}")
+        
+        # Store selected algorithm
+        with open("app/models/saved_models/selected_algorithm.json", "w") as f:
+            json.dump({"selected_algorithm": algorithm}, f)
+        
+        return JSONResponse(content={
+            "selected_algorithm": algorithm,
+            "message": f"Algorithm switched to {algorithm}"
+        })
+    
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to select algorithm: {str(e)}")
 
 
 @router.post("/retrain", tags=["Model Management"])

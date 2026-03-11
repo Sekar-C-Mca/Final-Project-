@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { AlertCircle, TrendingUp, Brain, RefreshCw, BarChart3, Zap, Code, CheckCircle } from 'lucide-react';
+import { AlertCircle, TrendingUp, Brain, RefreshCw, BarChart3, Zap, Code, CheckCircle, ChevronRight, Settings } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import AlgorithmSelector from './AlgorithmSelector';
+import AlgorithmAnalysis from './AlgorithmAnalysis';
 import './MLTraining.css';
 
 const MLTraining = () => {
@@ -11,6 +13,10 @@ const MLTraining = () => {
   const [error, setError] = useState(null);
   const [selectedTab, setSelectedTab] = useState('overview');
   const [retraining, setRetraining] = useState(false);
+  const [showAlgorithmSelector, setShowAlgorithmSelector] = useState(false);
+  const [showAlgorithmAnalysis, setShowAlgorithmAnalysis] = useState(false);
+  const [currentAlgorithm, setCurrentAlgorithm] = useState('random_forest');
+  const [trainingAlgorithm, setTrainingAlgorithm] = useState('random_forest');
 
   const sampleMetrics = [
     {
@@ -57,7 +63,7 @@ const MLTraining = () => {
   useEffect(() => {
     fetchModelInfo();
     fetchPredictions();
-  }, []);
+  }, [currentAlgorithm]);
 
   const fetchModelInfo = async () => {
     try {
@@ -65,6 +71,7 @@ const MLTraining = () => {
       if (!response.ok) throw new Error('Failed to fetch model info');
       const data = await response.json();
       setModelInfo(data);
+      setCurrentAlgorithm(data.current_algorithm || 'random_forest');
       setLoading(false);
     } catch (err) {
       console.error('Error fetching model info:', err);
@@ -116,12 +123,17 @@ const MLTraining = () => {
       const response = await fetch('http://localhost:8000/api/ml/retrain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataset_size: 800 })
+        body: JSON.stringify({ 
+          algorithm: trainingAlgorithm,
+          dataset_size: 800 
+        })
       });
 
       if (!response.ok) throw new Error('Retraining failed');
       
-      alert('Model retrained successfully!');
+      const data = await response.json();
+      alert(`Model (${data.algorithm}) retrained successfully!`);
+      setCurrentAlgorithm(data.algorithm);
       fetchModelInfo();
       fetchPredictions();
     } catch (err) {
@@ -129,6 +141,14 @@ const MLTraining = () => {
     } finally {
       setRetraining(false);
     }
+  };
+
+  const handleAlgorithmSelect = (algorithm) => {
+    setTrainingAlgorithm(algorithm);
+    setCurrentAlgorithm(algorithm);
+    setShowAlgorithmSelector(false);
+    fetchModelInfo();
+    fetchPredictions();
   };
 
   if (loading) {
@@ -172,14 +192,43 @@ const MLTraining = () => {
             <h1>ML Optimization Model</h1>
             <p className="text-muted">Code optimization prediction and analysis</p>
           </div>
-          <button 
-            className="btn btn-primary"
-            onClick={handleRetrain}
-            disabled={retraining}
-          >
-            <RefreshCw size={20} />
-            {retraining ? 'Retraining...' : 'Retrain Model'}
-          </button>
+          <div className="header-controls">
+            <div className="algorithm-selector-wrapper">
+              <label htmlFor="algorithm-dropdown">Algorithm:</label>
+              <select 
+                id="algorithm-dropdown"
+                value={currentAlgorithm}
+                onChange={(e) => {
+                  setCurrentAlgorithm(e.target.value);
+                  setTrainingAlgorithm(e.target.value);
+                }}
+                className="algorithm-dropdown"
+              >
+                <option value="random_forest">🌲 Random Forest</option>
+                <option value="gradient_boosting">📈 Gradient Boosting</option>
+                <option value="xgboost">⚡ XGBoost</option>
+                <option value="svm">🎯 SVM</option>
+                <option value="logistic_regression">🧠 Logistic Regression</option>
+              </select>
+            </div>
+            <div className="header-buttons">
+            <button 
+              className="btn btn-secondary"
+              onClick={() => setShowAlgorithmSelector(true)}
+            >
+              <Settings size={20} />
+              Select Algorithm
+            </button>
+            <button 
+              className="btn btn-primary"
+              onClick={handleRetrain}
+              disabled={retraining}
+            >
+              <RefreshCw size={20} />
+              {retraining ? 'Retraining...' : 'Retrain Model'}
+            </button>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -188,6 +237,16 @@ const MLTraining = () => {
             <span>{error}</span>
           </div>
         )}
+
+        <div className="algorithm-info-bar">
+          <span className="algo-badge">Current Algorithm: <strong>{trainingAlgorithm.toUpperCase()}</strong></span>
+          <button 
+            className="info-link"
+            onClick={() => setShowAlgorithmAnalysis(true)}
+          >
+            View Analysis <ChevronRight size={16} />
+          </button>
+        </div>
 
         <div className="tab-navigation">
           <button 
@@ -254,15 +313,21 @@ const MLTraining = () => {
               <div className="info-grid">
                 <div className="info-row">
                   <span className="label">Algorithm</span>
-                  <span className="value">{modelInfo?.algorithm || 'random_forest'}</span>
+                  <span className="value algo-value">
+                    {trainingAlgorithm.replace('_', ' ').toUpperCase()}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Training Samples</span>
-                  <span className="value">{modelInfo?.dataset_info?.train_size || 640}</span>
+                  <span className="value">
+                    {modelInfo?.available_models?.[trainingAlgorithm]?.dataset_info?.train_size || 640}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Test Samples</span>
-                  <span className="value">{modelInfo?.dataset_info?.test_size || 160}</span>
+                  <span className="value">
+                    {modelInfo?.available_models?.[trainingAlgorithm]?.dataset_info?.test_size || 160}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Status</span>
@@ -394,6 +459,21 @@ const MLTraining = () => {
           </div>
         )}
       </div>
+
+      {showAlgorithmSelector && (
+        <AlgorithmSelector 
+          onAlgorithmSelect={handleAlgorithmSelect}
+          onClose={() => setShowAlgorithmSelector(false)}
+          currentAlgorithm={trainingAlgorithm}
+        />
+      )}
+
+      {showAlgorithmAnalysis && (
+        <AlgorithmAnalysis
+          algorithm={trainingAlgorithm}
+          onClose={() => setShowAlgorithmAnalysis(false)}
+        />
+      )}
     </>
   );
 };
