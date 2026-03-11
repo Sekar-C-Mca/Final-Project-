@@ -204,11 +204,11 @@ const MLTraining = () => {
                 }}
                 className="algorithm-dropdown"
               >
-                <option value="random_forest">🌲 Random Forest</option>
-                <option value="gradient_boosting">📈 Gradient Boosting</option>
-                <option value="xgboost">⚡ XGBoost</option>
-                <option value="svm">🎯 SVM</option>
-                <option value="logistic_regression">🧠 Logistic Regression</option>
+                <option value="random_forest">Random Forest</option>
+                <option value="gradient_boosting">Gradient Boosting</option>
+                <option value="xgboost">XGBoost</option>
+                <option value="svm">SVM</option>
+                <option value="logistic_regression">Logistic Regression</option>
               </select>
             </div>
             <div className="header-buttons">

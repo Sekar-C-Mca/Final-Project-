@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from app.models.trainer import ModelTrainer
 from app.models.dataset_generator import DatasetGenerator
+from app.datasets.dataset_manager import DatasetManager
 from datetime import datetime
 from typing import Dict, List
 import numpy as np
@@ -14,8 +15,9 @@ import json
 
 router = APIRouter(prefix="/ml", tags=["ML Optimization"])
 
-# Initialize trainer
+# Initialize trainer and dataset manager
 trainer = ModelTrainer()
+dataset_manager = DatasetManager()
 
 # Load pre-trained model if available
 MODEL_PATH = "app/models/saved_models/random_forest_model.pkl"
@@ -377,4 +379,52 @@ def generate_recommendations(metrics: Dict, is_optimized: bool) -> List[str]:
     if not recommendations:
         recommendations.append("Code structure is reasonable - Monitor for future improvements")
     
+    return recommendations
+
+
+@router.get("/datasets/available", tags=["Datasets"])
+async def get_available_datasets():
+    """Get list of available datasets for download"""
+    try:
+        datasets = dataset_manager.get_available_datasets()
+        return JSONResponse(content={
+            "available_datasets": datasets,
+            "total": len(datasets)
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get available datasets: {str(e)}")
+
+
+@router.post("/datasets/download/{dataset_name}", tags=["Datasets"])
+async def download_dataset(dataset_name: str):
+    """Download a dataset"""
+    try:
+        filepath = dataset_manager.download_dataset(dataset_name)
+        
+        if filepath and os.path.exists(filepath):
+            return JSONResponse(content={
+                "status": "success",
+                "dataset": dataset_name,
+                "filepath": filepath,
+                "file_size": os.path.getsize(filepath),
+                "message": f"Dataset {dataset_name} downloaded successfully"
+            })
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to download dataset {dataset_name}")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error downloading dataset: {str(e)}")
+
+
+@router.get("/datasets/local", tags=["Datasets"])
+async def get_local_datasets():
+    """Get list of locally stored datasets"""
+    try:
+        local_datasets = dataset_manager.list_local_datasets()
+        return JSONResponse(content={
+            "local_datasets": local_datasets,
+            "total": len(local_datasets)
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list local datasets: {str(e)}")
     return recommendations
