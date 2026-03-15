@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-11T14:38:45.806740",
+  "algorithm": "gradient_boosting",
+  "dataset_file": "app/models/saved_models/gradient_boosting_dataset.npz",
+  "dataset": {
+    "total_samples": 960,
+    "optimized_samples": 480,
+    "unoptimized_samples": 480,
+    "train_size": 768,
+    "test_size": 192
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "auc_roc": 1.0
+  },
+  "feature_importance": {
+    "LOC": 8.083330282526335e-16,
+    "Complexity": 0.23333623277066715,
+    "Dependencies": 0.035810805068759194,
+    "Functions": 0.24154685679235274,
+    "Classes": 0.0,
+    "Comments": 0.41512409264647243,
+    "Complexity/LOC": 1.0091439683897986e-15,
+    "Comment Ratio": 0.07418201272174678,
+    "Functions/Class": 2.5893414216451267e-17
+  },
+  "feature_names": [
+    "LOC",
+    "Complexity",
+    "Dependencies",
+    "Functions",
+    "Classes",
+    "Comments",
+    "Complexity/LOC",
+    "Comment Ratio",
+    "Functions/Class"
+  ]
+}

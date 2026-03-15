@@ -104,9 +104,8 @@ class ModelTrainer:
                 'verbose': -1
             },
             'svm': {
-                'kernel': 'rbf',
+                'kernel': 'linear',  # Changed from 'rbf' to 'linear' for feature importance
                 'C': 1.0,
-                'gamma': 'scale',
                 'probability': True,
                 'random_state': 42
             },
@@ -200,12 +199,54 @@ class ModelTrainer:
         return predictions, probabilities
     
     def get_feature_importance(self) -> Optional[Dict[str, float]]:
-        """Get feature importance for tree-based models"""
-        if not hasattr(self.model, 'feature_importances_'):
+        """Get feature importance for all model types"""
+        if self.model is None:
             return None
         
-        importances = self.model.feature_importances_
-        return {name: float(importance) for name, importance in zip(self.feature_names, importances)}
+        # Tree-based models have feature_importances_ attribute
+        if hasattr(self.model, 'feature_importances_'):
+            importances = self.model.feature_importances_
+            return {name: float(importance) for name, importance in zip(self.feature_names, importances)}
+        
+        # Linear models (Logistic Regression) - use coefficient magnitude
+        elif hasattr(self.model, 'coef_'):
+            # For binary classification, coef_ shape is (1, n_features)
+            if len(self.model.coef_.shape) > 1:
+                coefficients = np.abs(self.model.coef_[0])
+            else:
+                coefficients = np.abs(self.model.coef_)
+            
+            # Normalize to sum to 1 (like tree-based importance)
+            if coefficients.sum() > 0:
+                importances = coefficients / coefficients.sum()
+            else:
+                importances = coefficients
+                
+            return {name: float(importance) for name, importance in zip(self.feature_names, importances)}
+        
+        # SVM - use coefficient magnitude if available (for linear kernel)
+        elif hasattr(self.model, 'coef_') and self.model.coef_ is not None:
+            # SVM coef_ is available for linear kernels
+            coefficients = np.abs(self.model.coef_[0]) if len(self.model.coef_.shape) > 1 else np.abs(self.model.coef_)
+            
+            # Normalize to sum to 1
+            if coefficients.sum() > 0:
+                importances = coefficients / coefficients.sum()
+            else:
+                importances = coefficients
+                
+            return {name: float(importance) for name, importance in zip(self.feature_names, importances)}
+        
+        # For non-linear SVM or other models without direct feature importance
+        else:
+            # Use permutation importance as fallback
+            try:
+                from sklearn.inspection import permutation_importance
+                # We need X_test for permutation importance, but we don't have it here
+                # Return None for now, but we could implement this with stored test data
+                return None
+            except ImportError:
+                return None
     
     def save_model(self, filename: str = None) -> str:
         """Save trained model to disk"""

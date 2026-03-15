@@ -1,0 +1,20 @@
+[
+    {
+        "name": "Item 1",
+        "value": 100,
+        "category": "electronics",
+        "timestamp": "2024-01-01T00:00:00Z"
+    },
+    {
+        "name": "Item 2", 
+        "value": 250,
+        "category": "books",
+        "timestamp": "2024-01-02T00:00:00Z"
+    },
+    {
+        "name": "Item 3",
+        "value": 75,
+        "category": "clothing",
+        "timestamp": "2024-01-03T00:00:00Z"
+    }
+]

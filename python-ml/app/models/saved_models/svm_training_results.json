@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-11T14:54:34.181780",
+  "algorithm": "svm",
+  "dataset_file": "app/models/saved_models/svm_dataset.npz",
+  "dataset": {
+    "total_samples": 480,
+    "optimized_samples": 240,
+    "unoptimized_samples": 240,
+    "train_size": 384,
+    "test_size": 96
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "auc_roc": 1.0
+  },
+  "feature_importance": {
+    "LOC": 0.1434960923634178,
+    "Complexity": 0.20901057715839533,
+    "Dependencies": 0.1728768743839751,
+    "Functions": 0.04235558044607677,
+    "Classes": 0.0066964832615757355,
+    "Comments": 0.08928494944307466,
+    "Complexity/LOC": 0.08477666730680766,
+    "Comment Ratio": 0.21708717283210305,
+    "Functions/Class": 0.034415602804573966
+  },
+  "feature_names": [
+    "LOC",
+    "Complexity",
+    "Dependencies",
+    "Functions",
+    "Classes",
+    "Comments",
+    "Complexity/LOC",
+    "Comment Ratio",
+    "Functions/Class"
+  ]
+}

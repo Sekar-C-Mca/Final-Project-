@@ -34,6 +34,20 @@
     background: var(--bg-tertiary);
 }
 
+.session-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    color: var(--success);
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-left: auto;
+}
+
+.session-indicator svg {
+    color: var(--success);
+}
+
 .card-header h3 {
     font-size: 1.1rem;
     font-weight: 600;
@@ -47,6 +61,37 @@
 
 .card-content {
     padding: var(--spacing-lg);
+}
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.folder-info {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.folder-info div {
+    flex: 1;
+}
+
+.folder-info p {
+    margin: 0 0 var(--spacing-xs) 0;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.folder-info small {
+    color: var(--text-secondary);
 }
 
 .form-group {

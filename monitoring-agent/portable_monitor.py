@@ -9,6 +9,7 @@ import sys
 import json
 import time
 import re
+import requests
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,11 @@ class PortableFileMonitor(FileSystemEventHandler):
         self.total_analyzed = 0
         self.high_risk_count = 0
         self.session_start_time = time.time()
+        
+        # ML API configuration
+        self.ml_api_url = 'http://localhost:8000'
+        self.session = requests.Session()
+        self.session.headers.update({'Content-Type': 'application/json'})
         
     def should_analyze(self, file_path: str) -> bool:
         """Check if file should be analyzed"""
@@ -229,6 +235,182 @@ class PortableFileMonitor(FileSystemEventHandler):
             'functions_per_class': functions_per_class
         }
     
+    def send_to_ml_api(self, metrics: dict, file_path: str) -> dict:
+        """Send extracted features to ML API for real-time analysis"""
+        try:
+            # Prepare feature vector for ML analysis
+            feature_vector = [
+                metrics['loc'],
+                metrics['complexity'],
+                metrics['dependencies'],
+                metrics['functions'],
+                metrics['classes'],
+                metrics['comments'],
+                metrics['complexity_per_loc'],
+                metrics['comment_ratio'],
+                metrics['functions_per_class']
+            ]
+            
+            payload = {
+                'code_content': '',  # Not needed for feature-based analysis
+                'features': feature_vector,
+                'file_path': file_path,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Send to ML API
+            response = self.session.post(
+                f"{self.ml_api_url}/api/analyze-code",
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                ml_result = response.json()
+                print(f"   🤖 ML Analysis Complete: {ml_result.get('status', 'success')}")
+                
+                # Display ML predictions if available
+                if 'predictions' in ml_result:
+                    predictions = ml_result['predictions']
+                    print(f"\n   🎯 ML PREDICTIONS:")
+                    for algo, pred in predictions.items():
+                        risk = pred.get('risk_level', 'unknown')
+                        conf = pred.get('confidence', 0)
+                        emoji = {'low': '🟢', 'medium': '🟡', 'high': '🔴'}.get(risk, '⚪')
+                        print(f"   └─ {algo.replace('_', ' ').title()}: {emoji} {risk.upper()} ({conf:.1%})")
+                
+                # Store analysis data for frontend FIRST (before display that might error)
+                self.store_analysis_data(file_path, feature_vector, ml_result)
+
+                # Display feature importance (non-critical, wrapped in try/except)
+                try:
+                    if 'feature_importance' in ml_result:
+                        importance = ml_result['feature_importance']
+                        print(f"\n   📈 FEATURE IMPORTANCE:")
+                        
+                        # feature_importance can be:
+                        #  - nested dict: {"algo_name": {"feature": score, ...}, ...}
+                        #  - flat dict: {"feature": score, ...}
+                        #  - list: [score1, score2, ...]
+                        if isinstance(importance, dict):
+                            # Check if values are dicts (nested per-algorithm format)
+                            first_val = next(iter(importance.values()), None) if importance else None
+                            if isinstance(first_val, dict):
+                                # Nested: average importance across algorithms
+                                merged = {}
+                                algo_count = 0
+                                for algo_name, algo_imp in importance.items():
+                                    if isinstance(algo_imp, dict):
+                                        algo_count += 1
+                                        for feat, score in algo_imp.items():
+                                            merged[feat] = merged.get(feat, 0) + float(score)
+                                if algo_count > 0:
+                                    merged = {k: v / algo_count for k, v in merged.items()}
+                                sorted_features = sorted(merged.items(), key=lambda x: x[1], reverse=True)
+                                for feature, score in sorted_features[:5]:
+                                    print(f"   └─ {feature}: {score:.3f}")
+                            else:
+                                # Flat dict: {"feature": score}
+                                sorted_features = sorted(importance.items(), key=lambda x: float(x[1]), reverse=True)
+                                for feature, score in sorted_features[:5]:
+                                    print(f"   └─ {feature}: {float(score):.3f}")
+                        elif isinstance(importance, list) and len(importance) == 9:
+                            feature_names = ['LOC', 'COMPLEXITY', 'DEPENDENCIES', 'FUNCTIONS', 
+                                           'CLASSES', 'COMMENTS', 'COMPLEXITY_PER_LOC', 
+                                           'COMMENT_RATIO', 'FUNCTIONS_PER_CLASS']
+                            feature_scores = list(zip(feature_names, importance))
+                            sorted_features = sorted(feature_scores, key=lambda x: float(x[1]), reverse=True)
+                            for feature, score in sorted_features[:5]:
+                                print(f"   └─ {feature}: {float(score):.3f}")
+                except Exception as display_err:
+                    print(f"   ⚠️  Feature importance display error: {display_err}")
+                
+                return ml_result
+                
+            else:
+                print(f"   ⚠️  ML API error: {response.status_code}")
+                return {}
+                
+        except requests.exceptions.ConnectionError:
+            print(f"   ⚠️  ML API unavailable (connection failed)")
+            return {}
+        except Exception as e:
+            print(f"   ⚠️  ML API error: {e}")
+            return {}
+    
+    def _compute_consensus(self, predictions: dict) -> dict:
+        """Compute consensus risk level and confidence from individual algorithm predictions"""
+        if not predictions:
+            return {'risk_level': 'unknown', 'confidence': 0.0}
+        
+        risk_counts = {'low': 0, 'medium': 0, 'high': 0}
+        total_confidence = 0.0
+        count = 0
+        
+        for algo, pred in predictions.items():
+            if isinstance(pred, dict):
+                risk = pred.get('risk_level', 'medium').lower()
+                conf = pred.get('confidence', 0.5)
+                if risk in risk_counts:
+                    risk_counts[risk] += 1
+                total_confidence += conf
+                count += 1
+        
+        if count == 0:
+            return {'risk_level': 'unknown', 'confidence': 0.0}
+        
+        # Majority vote for risk level
+        consensus_risk = max(risk_counts, key=risk_counts.get)
+        avg_confidence = total_confidence / count
+        
+        return {
+            'risk_level': consensus_risk,
+            'confidence': round(avg_confidence, 4),
+            'agreement': risk_counts[consensus_risk] / count
+        }
+
+    def store_analysis_data(self, file_path: str, features: list, ml_result: dict) -> None:
+        """Store analysis data for frontend consumption"""
+        try:
+            feature_names = ['LOC', 'Complexity', 'Dependencies', 'Functions', 
+                           'Classes', 'Comments', 'Complexity/LOC', 
+                           'Comment Ratio', 'Functions/Class']
+            
+            # Build extracted_features dict from feature vector
+            extracted_features = {}
+            for i, name in enumerate(feature_names):
+                if i < len(features):
+                    extracted_features[name] = features[i]
+            
+            # Compute consensus from predictions
+            predictions = ml_result.get('predictions', {})
+            consensus = self._compute_consensus(predictions)
+            
+            store_payload = {
+                'file_path': file_path,
+                'filename': os.path.basename(file_path),
+                'extracted_features': extracted_features,
+                'feature_vector': features,
+                'features': features,
+                'predictions': predictions,
+                'consensus': consensus,
+                'feature_importance': ml_result.get('feature_importance', {}),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            store_response = self.session.post(
+                f"{self.ml_api_url}/api/store-analysis",
+                json=store_payload,
+                timeout=5
+            )
+            
+            if store_response.status_code != 200:
+                print(f"   ⚠️  Failed to store analysis: {store_response.status_code}")
+                
+        except Exception as e:
+            print(f"   ⚠️  Storage error: {e}")
+    
+    
     def analyze_file(self, file_path: str):
         """Simple file analysis with comprehensive error handling"""
         try:
@@ -305,6 +487,9 @@ class PortableFileMonitor(FileSystemEventHandler):
             print(f"   └─ COMMENT RATIO: {metrics['comment_ratio']}")
             print(f"   └─ FUNCTIONS PER CLASS: {metrics['functions_per_class']}")
             
+            # Send to ML API for dynamic analysis
+            ml_result = self.send_to_ml_api(metrics, file_path)
+            
             if has_mismatch:
                 print(f"\n   💡 Recommendation: Review language mismatch - file may be in wrong folder")
             elif risk_level != 'low':
@@ -317,6 +502,12 @@ class PortableFileMonitor(FileSystemEventHandler):
                 ]
                 if risk_score > 0:
                     print(f"\n   💡 Recommendation: {recommendations[min(risk_score-1, len(recommendations)-1)]}")
+            
+            # Show ML-based recommendations if available
+            if ml_result.get('recommendations'):
+                print(f"\n   🤖 ML Recommendations:")
+                for i, rec in enumerate(ml_result['recommendations'][:3], 1):
+                    print(f"      {i}. {rec}")
             
             print()  # Add spacing
             self.total_analyzed += 1

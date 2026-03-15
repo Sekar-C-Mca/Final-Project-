@@ -7,13 +7,61 @@ import './DeployScript.css';
 const DeployScript = () => {
     const { monitorOutput, addToOutput, clearOutput, stats, updateStats } = useMonitor();
     
-    const [selectedFolder, setSelectedFolder] = useState('');
-    const [projectName, setProjectName] = useState('');
-    const [isMonitoring, setIsMonitoring] = useState(false);
-    const [deployStatus, setDeployStatus] = useState('idle'); // idle, deploying, deployed, error
+    // Persistent state - restore from localStorage
+    const [selectedFolder, setSelectedFolder] = useState(() => {
+        return localStorage.getItem('deployScript_selectedFolder') || '';
+    });
+    const [projectName, setProjectName] = useState(() => {
+        return localStorage.getItem('deployScript_projectName') || '';
+    });
+    const [isMonitoring, setIsMonitoring] = useState(() => {
+        return JSON.parse(localStorage.getItem('deployScript_isMonitoring') || 'false');
+    });
+    const [deployStatus, setDeployStatus] = useState(() => {
+        return localStorage.getItem('deployScript_deployStatus') || 'idle';
+    });
     const [mlBackendStatus, setMlBackendStatus] = useState('unknown');
-    const [currentSession, setCurrentSession] = useState(null);
-    const [currentDeployment, setCurrentDeployment] = useState(null);
+    const [currentSession, setCurrentSession] = useState(() => {
+        const saved = localStorage.getItem('deployScript_currentSession');
+        return saved ? JSON.parse(saved) : null;
+    });
+    const [currentDeployment, setCurrentDeployment] = useState(() => {
+        const saved = localStorage.getItem('deployScript_currentDeployment');
+        return saved ? JSON.parse(saved) : null;
+    });
+
+    // Persist state changes to localStorage
+    useEffect(() => {
+        localStorage.setItem('deployScript_selectedFolder', selectedFolder);
+    }, [selectedFolder]);
+
+    useEffect(() => {
+        localStorage.setItem('deployScript_projectName', projectName);
+    }, [projectName]);
+
+    useEffect(() => {
+        localStorage.setItem('deployScript_isMonitoring', JSON.stringify(isMonitoring));
+    }, [isMonitoring]);
+
+    useEffect(() => {
+        localStorage.setItem('deployScript_deployStatus', deployStatus);
+    }, [deployStatus]);
+
+    useEffect(() => {
+        if (currentSession) {
+            localStorage.setItem('deployScript_currentSession', JSON.stringify(currentSession));
+        } else {
+            localStorage.removeItem('deployScript_currentSession');
+        }
+    }, [currentSession]);
+
+    useEffect(() => {
+        if (currentDeployment) {
+            localStorage.setItem('deployScript_currentDeployment', JSON.stringify(currentDeployment));
+        } else {
+            localStorage.removeItem('deployScript_currentDeployment');
+        }
+    }, [currentDeployment]);
 
     // Check ML backend status
     useEffect(() => {
@@ -21,6 +69,61 @@ const DeployScript = () => {
         const interval = setInterval(checkMlBackendStatus, 30000);
         return () => clearInterval(interval);
     }, []);
+
+    // Show restoration message when component loads with persisted state
+    useEffect(() => {
+        if (selectedFolder && projectName) {
+            addToOutput(`🔄 Restored project session: ${projectName}`, 'info');
+            addToOutput(`📁 Project folder: ${selectedFolder}`, 'info');
+        }
+    }, []); // Empty dependency array - only run once on mount
+
+    // Clear all persistent state
+    const clearPersistedState = () => {
+        localStorage.removeItem('deployScript_selectedFolder');
+        localStorage.removeItem('deployScript_projectName');
+        localStorage.removeItem('deployScript_isMonitoring');
+        localStorage.removeItem('deployScript_deployStatus');
+        localStorage.removeItem('deployScript_currentSession');
+        localStorage.removeItem('deployScript_currentDeployment');
+        
+        // Reset component state
+        setSelectedFolder('');
+        setProjectName('');
+        setIsMonitoring(false);
+        setDeployStatus('idle');
+        setCurrentSession(null);
+        setCurrentDeployment(null);
+        
+        addToOutput(`🧹 Project session cleared`, 'info');
+    };
+
+    // Clear ML analysis data when folder changes
+    const clearMLAnalysisData = async () => {
+        try {
+            // Clear ML API recent analyses
+            await fetch('http://localhost:8000/api/clear-analyses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            addToOutput('🧹 Previous ML analysis data cleared', 'info');
+        } catch (error) {
+            console.warn('Could not clear ML data:', error);
+            // Don't show error to user as it's not critical
+        }
+    };
+
+    // Check if session was restored and show notification
+    useEffect(() => {
+        if (selectedFolder && projectName) {
+            addToOutput('🔄 Session restored from previous visit', 'info');
+            addToOutput(`📁 Project folder: ${selectedFolder}`, 'success');
+            addToOutput(`📝 Project name: ${projectName}`, 'success');
+            addToOutput('✅ Ready to continue monitoring', 'info');
+        }
+    }, []); // Only run once on component mount
 
     const checkMlBackendStatus = async () => {
         try {
@@ -46,6 +149,9 @@ const DeployScript = () => {
 
     const handleFolderSelect = async () => {
         try {
+            // Clear previous ML analysis data first
+            await clearMLAnalysisData();
+            
             // Use the newer File System Access API if available
             if ('showDirectoryPicker' in window) {
                 try {
@@ -264,6 +370,9 @@ const DeployScript = () => {
             setIsMonitoring(true);
             addToOutput('🚀 Starting monitoring session...', 'info');
             addToOutput('⏳ Initializing file watcher...', 'info');
+            
+            // Clear any previous ML analysis data
+            await clearMLAnalysisData();
             
             // Create a session for tracking
             const mockSession = {
@@ -828,32 +937,62 @@ const DeployScript = () => {
                             <div className="card-header">
                                 <FolderOpen size={20} />
                                 <h3>Project Selection</h3>
+                                {selectedFolder && (
+                                    <span className="session-indicator">
+                                        <CheckCircle size={16} />
+                                        Session Active
+                                    </span>
+                                )}
                             </div>
                             <div className="card-content">
-                                <button 
-                                    className="btn btn-primary full-width"
-                                    onClick={handleFolderSelect}
-                                >
-                                    <FolderOpen size={20} />
-                                    Choose Project Folder
-                                </button>
-                                
-                                <button 
-                                    className="btn btn-secondary full-width"
-                                    onClick={() => {
-                                        setSelectedFolder('DEMO');
-                                        setProjectName('demo_project');
-                                        addToOutput('📁 Demo project loaded for testing', 'success');
-                                        addToOutput('✅ Ready to start monitoring', 'info');
-                                    }}
-                                >
-                                    <Play size={20} />
-                                    Use Demo Project
-                                </button>
+                                <div className="button-group">
+                                    <button 
+                                        className="btn btn-primary"
+                                        onClick={handleFolderSelect}
+                                    >
+                                        <FolderOpen size={20} />
+                                        Choose Project Folder
+                                    </button>
+                                    
+                                    <button 
+                                        className="btn btn-secondary"
+                                        onClick={() => {
+                                            setSelectedFolder('DEMO');
+                                            setProjectName('demo_project');
+                                            addToOutput('📁 Demo project loaded for testing', 'success');
+                                            addToOutput('✅ Ready to start monitoring', 'info');
+                                        }}
+                                    >
+                                        <Play size={20} />
+                                        Use Demo Project
+                                    </button>
+
+                                    {selectedFolder && (
+                                        <button 
+                                            className="btn btn-outline-danger"
+                                            onClick={clearPersistedState}
+                                            title="Clear current session and start fresh"
+                                        >
+                                            <RefreshCw size={16} />
+                                            Clear Session
+                                        </button>
+                                    )}
+                                </div>
                                 
                                 {selectedFolder && (
                                     <div className="selected-folder">
-                                        <p><strong>Selected:</strong> {selectedFolder}</p>
+                                        <div className="folder-info">
+                                            <CheckCircle size={16} className="text-success" />
+                                            <div>
+                                                <p><strong>Selected:</strong> {selectedFolder}</p>
+                                                <small className="text-muted">
+                                                    {selectedFolder !== 'DEMO' ? 
+                                                        'Session persisted - will be restored on page reload' : 
+                                                        'Demo project for testing purposes'
+                                                    }
+                                                </small>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
 

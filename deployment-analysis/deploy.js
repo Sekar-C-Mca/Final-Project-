@@ -18,86 +18,6 @@ const sentUpdateIndices = new Map(); // Track which updates have been sent to av
 // All routes are protected
 router.use(protect);
 
-// Helper: Deep search for a folder by name on media drives and common locations
-async function findFolderDeep(folderName, maxDepth = 4) {
-    const user = process.env.USER || 'sekar';
-    const projectRoot = path.join(__dirname, '../../');
-    
-    // 1. Direct / shallow matches first (fast)
-    const shallowPaths = [
-        path.join(projectRoot, folderName),
-        path.join(process.cwd(), folderName),
-        path.join('/home', user, folderName),
-        path.join('/home', user, 'Desktop', folderName),
-        path.join('/home', user, 'Documents', folderName),
-        path.join('/home', user, 'Projects', folderName),
-    ];
-
-    // Add media drive root-level matches
-    try {
-        const mediaUserDir = `/media/${user}`;
-        const drives = await fs.readdir(mediaUserDir);
-        for (const drive of drives) {
-            shallowPaths.push(path.join(mediaUserDir, drive, folderName));
-        }
-    } catch (_) {}
-
-    for (const p of shallowPaths) {
-        try {
-            if ((await fs.stat(p)).isDirectory()) return p;
-        } catch (_) {}
-    }
-
-    // 2. Deep search on media drives (breadth-first, depth limited)
-    try {
-        const mediaUserDir = `/media/${user}`;
-        const drives = await fs.readdir(mediaUserDir);
-        for (const drive of drives) {
-            const driveRoot = path.join(mediaUserDir, drive);
-            const found = await bfsFind(driveRoot, folderName, maxDepth);
-            if (found) return found;
-        }
-    } catch (_) {}
-
-    // 3. Deep search in home directory
-    try {
-        const found = await bfsFind(`/home/${user}`, folderName, maxDepth);
-        if (found) return found;
-    } catch (_) {}
-
-    return null;
-}
-
-// Breadth-first directory search (avoids recursion stack overflow)
-async function bfsFind(root, targetName, maxDepth) {
-    let queue = [{ dir: root, depth: 0 }];
-    const skipDirs = new Set(['node_modules', '.git', '__pycache__', 'venv', 'env', '.cache', 'dist', 'build', '.next']);
-    
-    while (queue.length > 0) {
-        const { dir, depth } = queue.shift();
-        if (depth > maxDepth) continue;
-        
-        try {
-            const entries = await fs.readdir(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                if (!entry.isDirectory()) continue;
-                if (skipDirs.has(entry.name)) continue;
-                
-                if (entry.name === targetName) {
-                    return path.join(dir, entry.name);
-                }
-                
-                if (depth + 1 <= maxDepth) {
-                    queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
-                }
-            }
-        } catch (_) {
-            // Permission denied or unreadable – skip
-        }
-    }
-    return null;
-}
-
 // @route   POST /api/deploy/start-realtime-monitor
 // @desc    Deploy monitoring script to folder and start real-time monitoring
 // @access  Private
@@ -114,37 +34,66 @@ router.post('/start-realtime-monitor', [
         // Smart path resolution - handle both absolute and relative paths  
         let absoluteFolderPath;
         if (path.isAbsolute(folderPath)) {
-            // Absolute path – use directly
+            absoluteFolderPath = folderPath;
+        } else {
+            // For relative paths, try common locations including media drives
+            const projectRoot = path.join(__dirname, '../../');
+            const possiblePaths = [
+                path.join(projectRoot, folderPath), // Relative to project root
+                path.join(process.cwd(), folderPath), // Relative to current directory
+                path.join('/home', process.env.USER || 'user', folderPath), // User home directory
+                path.join('/home', process.env.USER || 'user', 'Desktop', folderPath), // Desktop
+                path.join('/home', process.env.USER || 'user', 'Documents', folderPath), // Documents
+                folderPath // Try as-is in case it's already resolved
+            ];
+            
+            // Special handling for media directories - search dynamically
             try {
-                if ((await fs.stat(folderPath)).isDirectory()) {
-                    absoluteFolderPath = folderPath;
+                const mediaUserDir = `/media/${process.env.USER || 'sekar'}`;
+                const mediaContents = await fs.readdir(mediaUserDir);
+                for (const drive of mediaContents) {
+                    possiblePaths.push(path.join(mediaUserDir, drive, folderPath));
                 }
-            } catch (_) {}
-        }
-        
-        if (!absoluteFolderPath) {
-            // Deep search for the folder by name
-            console.log(`Deep searching for folder: ${folderPath}`);
-            absoluteFolderPath = await findFolderDeep(folderPath);
-        }
-        
-        if (!absoluteFolderPath) {
-            // Last resort – create a temp directory
-            const tempPath = path.join('/tmp', 'riskguard_test', folderPath);
-            try {
-                await fs.mkdir(tempPath, { recursive: true });
-                absoluteFolderPath = tempPath;
-                console.log(`Created test directory for deployment: ${tempPath}`);
-                const testFile = path.join(tempPath, 'test.py');
-                await fs.writeFile(testFile, '# Test file for monitoring\nprint("Hello World")');
-            } catch (createError) {
-                console.error('Failed to create test directory:', createError);
-                return res.status(500).json({
-                    success: false,
-                    message: `Could not find or create deployment location for "${folderPath}"`,
-                    error: 'DEPLOYMENT_LOCATION_ERROR',
-                    details: createError.message
-                });
+            } catch (e) {
+                // Media directory not accessible, continue with other paths
+            }
+            
+            console.log('Searching for folder in possible locations:', possiblePaths);
+            
+            // Find the first path that exists
+            for (const testPath of possiblePaths) {
+                try {
+                    const stats = await fs.stat(testPath);
+                    if (stats.isDirectory()) {
+                        absoluteFolderPath = testPath;
+                        console.log(`Found folder at: ${testPath}`);
+                        break;
+                    }
+                } catch (e) {
+                    // Path doesn't exist, try next one
+                }
+            }
+            
+            // If no path found, create a working directory for testing
+            if (!absoluteFolderPath) {
+                const tempPath = path.join('/tmp', 'riskguard_test', folderPath);
+                try {
+                    await fs.mkdir(tempPath, { recursive: true });
+                    absoluteFolderPath = tempPath;
+                    console.log(`Created test directory for deployment: ${tempPath}`);
+                    
+                    // Create a test file to simulate a project
+                    const testFile = path.join(tempPath, 'test.py');
+                    await fs.writeFile(testFile, '# Test file for monitoring\nprint("Hello World")');
+                } catch (createError) {
+                    console.error('Failed to create test directory:', createError);
+                    return res.status(500).json({
+                        success: false,
+                        message: `Could not find or create deployment location for "${folderPath}"`,
+                        error: 'DEPLOYMENT_LOCATION_ERROR',
+                        details: createError.message
+                    });
+                }
             }
         }
         
@@ -567,36 +516,69 @@ router.post('/script', [
         
         console.log(`Deploying script to: ${folderPath} (User: ${userId})`);
         
-        // Smart path resolution using deep search helper
+        // Smart path resolution - handle both absolute and relative paths
         let absoluteFolderPath;
         if (path.isAbsolute(folderPath)) {
+            absoluteFolderPath = folderPath;
+        } else {
+            // For relative paths, try common locations including media drives
+            const projectRoot = path.join(__dirname, '../../');
+            const possiblePaths = [
+                path.join(projectRoot, folderPath), // Relative to project root
+                path.join(process.cwd(), folderPath), // Relative to current directory
+                path.join('/home', process.env.USER || 'user', folderPath), // User home directory
+                path.join('/home', process.env.USER || 'user', 'Desktop', folderPath), // Desktop
+                path.join('/home', process.env.USER || 'user', 'Documents', folderPath), // Documents
+                folderPath // Try as-is in case it's already resolved
+            ];
+            
+            // Special handling for media directories - search dynamically
             try {
-                if ((await fs.stat(folderPath)).isDirectory()) {
-                    absoluteFolderPath = folderPath;
+                const mediaUserDir = `/media/${process.env.USER || 'sekar'}`;
+                const mediaContents = await fs.readdir(mediaUserDir);
+                for (const drive of mediaContents) {
+                    possiblePaths.push(path.join(mediaUserDir, drive, folderPath));
                 }
-            } catch (_) {}
-        }
-        
-        if (!absoluteFolderPath) {
-            console.log(`Deep searching for folder: ${folderPath}`);
-            absoluteFolderPath = await findFolderDeep(folderPath);
-        }
-        
-        if (!absoluteFolderPath) {
-            const tempPath = path.join('/tmp', 'riskguard_script_deploy', folderPath);
-            try {
-                await fs.mkdir(tempPath, { recursive: true });
-                absoluteFolderPath = tempPath;
-                console.log(`Created test directory for script deployment: ${tempPath}`);
-                const testFile = path.join(tempPath, 'sample.js');
-                await fs.writeFile(testFile, '// Sample file for monitoring\nconsole.log("Hello World");');
-            } catch (createError) {
-                return res.status(500).json({
-                    success: false,
-                    message: `Could not find or create deployment location for "${folderPath}"`,
-                    error: 'SCRIPT_DEPLOYMENT_ERROR',
-                    details: createError.message
-                });
+            } catch (e) {
+                // Media directory not accessible, continue with other paths
+            }
+            
+            console.log('Searching for script deployment folder:', possiblePaths);
+            
+            // Find the first path that exists
+            for (const testPath of possiblePaths) {
+                try {
+                    const stats = await fs.stat(testPath);
+                    if (stats.isDirectory()) {
+                        absoluteFolderPath = testPath;
+                        console.log(`Found folder at: ${testPath}`);
+                        break;
+                    }
+                } catch (e) {
+                    // Path doesn't exist, try next one
+                }
+            }
+            
+            // If no path found, create a working directory for testing
+            if (!absoluteFolderPath) {
+                const tempPath = path.join('/tmp', 'riskguard_script_deploy', folderPath);
+                try {
+                    await fs.mkdir(tempPath, { recursive: true });
+                    absoluteFolderPath = tempPath;
+                    console.log(`Created test directory for script deployment: ${tempPath}`);
+                    
+                    // Create a test file to simulate a project
+                    const testFile = path.join(tempPath, 'sample.js');
+                    await fs.writeFile(testFile, '// Sample file for monitoring\nconsole.log("Hello World");');
+                } catch (createError) {
+                    console.error('Failed to create test directory:', createError);
+                    return res.status(500).json({
+                        success: false,
+                        message: `Could not find or create deployment location for "${folderPath}"`,
+                        error: 'SCRIPT_DEPLOYMENT_ERROR',
+                        details: createError.message
+                    });
+                }
             }
         }
         

@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-11T14:05:44.530628",
+  "algorithm": "xgboost",
+  "dataset_file": "app/models/saved_models/xgboost_dataset.npz",
+  "dataset": {
+    "total_samples": 800,
+    "optimized_samples": 450,
+    "unoptimized_samples": 350,
+    "train_size": 640,
+    "test_size": 160
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "auc_roc": 1.0
+  },
+  "feature_importance": {
+    "LOC": 0.0,
+    "Complexity": 0.14184680581092834,
+    "Dependencies": 0.24432878196239471,
+    "Functions": 0.0,
+    "Classes": 0.0,
+    "Comments": 0.0,
+    "Complexity/LOC": 0.0,
+    "Comment Ratio": 0.6138244271278381,
+    "Functions/Class": 0.0
+  },
+  "feature_names": [
+    "LOC",
+    "Complexity",
+    "Dependencies",
+    "Functions",
+    "Classes",
+    "Comments",
+    "Complexity/LOC",
+    "Comment Ratio",
+    "Functions/Class"
+  ]
+}

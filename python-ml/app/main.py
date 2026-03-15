@@ -46,7 +46,8 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    db.close()
+    if db is not None:
+        db.close()
     print("\n✓ Application shutdown complete")
 
 @app.get("/")

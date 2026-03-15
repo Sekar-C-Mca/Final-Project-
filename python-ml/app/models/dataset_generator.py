@@ -125,11 +125,91 @@ class DatasetGenerator:
         np.savez(filepath, X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
         print(f"✓ Dataset saved to {filepath}")
     
+    def generate_algorithm_specific_dataset(self, algorithm: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Generate unique REAL dataset for specific algorithm with algorithm-specific characteristics"""
+        from app.datasets.real_dataset_manager import RealDatasetManager
+        
+        print(f"🔍 Loading REAL dataset for {algorithm}...")
+        
+        # Use real dataset manager
+        real_manager = RealDatasetManager()
+        
+        try:
+            # Get algorithm-specific real dataset
+            X_train, X_test, y_train, y_test = real_manager.download_algorithm_dataset(algorithm)
+            
+            dataset_info = real_manager.get_dataset_info(algorithm)
+            print(f"📊 Dataset: {dataset_info.get('name', 'Unknown')}")
+            print(f"🎯 Domain: {dataset_info.get('domain', 'Software Metrics')}")
+            print(f"📈 Ratio: {dataset_info.get('ratio', 'Unknown')}")
+            
+            return X_train, X_test, y_train, y_test
+            
+        except Exception as e:
+            print(f"❌ Error loading real dataset for {algorithm}: {e}")
+            print(f"🔄 Falling back to algorithm-specific synthetic data...")
+            
+            # Fallback to synthetic with different characteristics
+            algorithm_seeds = {
+                'random_forest': 42,
+                'gradient_boosting': 123,
+                'xgboost': 456,
+                'svm': 789,
+                'logistic_regression': 321
+            }
+            
+            seed = algorithm_seeds.get(algorithm, 42)
+            np.random.seed(seed)
+            
+            print(f"Generating algorithm-specific synthetic dataset for {algorithm} with seed {seed}...")
+            
+            # Algorithm-specific data characteristics for fallback
+            if algorithm == 'random_forest':
+                # Random Forest works well with diverse feature ranges
+                optimized_count, unoptimized_count = 350, 450
+            elif algorithm == 'gradient_boosting':
+                # Gradient Boosting prefers balanced datasets
+                optimized_count, unoptimized_count = 400, 400
+            elif algorithm == 'xgboost':
+                # XGBoost handles larger datasets well
+                optimized_count, unoptimized_count = 450, 350
+            elif algorithm == 'svm':
+                # SVM works well with smaller, clean datasets
+                optimized_count, unoptimized_count = 300, 300
+            elif algorithm == 'logistic_regression':
+                # Logistic Regression prefers balanced linear separable data
+                optimized_count, unoptimized_count = 380, 420
+            else:
+                optimized_count, unoptimized_count = 400, 400
+            
+            return self.generate_dataset(optimized_count, unoptimized_count, test_size=0.2)
+    
+    def save_algorithm_dataset(self, X_train: np.ndarray, X_test: np.ndarray, 
+                               y_train: np.ndarray, y_test: np.ndarray,
+                               algorithm: str = "random_forest") -> str:
+        """Save dataset specific to an algorithm"""
+        model_dir = "app/models/saved_models"
+        os.makedirs(model_dir, exist_ok=True)
+        filepath = os.path.join(model_dir, f"{algorithm}_dataset.npz")
+        np.savez(filepath, X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
+        print(f"✓ Dataset for {algorithm} saved to {filepath}")
+        return filepath
+    
     @staticmethod
     def load_dataset(filepath: str = "app/models/saved_models/dataset.npz") -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Load dataset from file"""
         data = np.load(filepath)
         return data['X_train'], data['X_test'], data['y_train'], data['y_test']
+    
+    @staticmethod
+    def load_algorithm_dataset(algorithm: str = "random_forest") -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Load dataset specific to an algorithm"""
+        filepath = f"app/models/saved_models/{algorithm}_dataset.npz"
+        if os.path.exists(filepath):
+            data = np.load(filepath)
+            return data['X_train'], data['X_test'], data['y_train'], data['y_test']
+        else:
+            raise FileNotFoundError(f"Dataset for algorithm '{algorithm}' not found at {filepath}")
     
     def get_feature_names(self):
         """Get names of features"""

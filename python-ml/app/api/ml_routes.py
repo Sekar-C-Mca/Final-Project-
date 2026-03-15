@@ -20,15 +20,39 @@ trainer = ModelTrainer()
 dataset_manager = DatasetManager()
 
 # Load pre-trained model if available
-MODEL_PATH = "app/models/saved_models/random_forest_model.pkl"
+SELECTED_ALGORITHM_FILE = "app/models/saved_models/selected_algorithm.json"
+CURRENT_ALGORITHM = "random_forest"  # Default algorithm
 MODEL_LOADED = False
 
-try:
-    if os.path.exists(MODEL_PATH):
-        trainer.load_model("random_forest_model.pkl")
-        MODEL_LOADED = True
-except:
-    pass
+def load_current_algorithm_model():
+    """Load the currently selected algorithm's model"""
+    global trainer, CURRENT_ALGORITHM, MODEL_LOADED
+    
+    try:
+        # Check if there's a selected algorithm file
+        if os.path.exists(SELECTED_ALGORITHM_FILE):
+            with open(SELECTED_ALGORITHM_FILE, 'r') as f:
+                data = json.load(f)
+                CURRENT_ALGORITHM = data.get('selected_algorithm', 'random_forest')
+        
+        # Try to load the algorithm's model
+        model_filename = f"{CURRENT_ALGORITHM}_model.pkl"
+        model_path = os.path.join("app/models/saved_models", model_filename)
+        
+        if os.path.exists(model_path):
+            trainer = ModelTrainer()
+            trainer.load_model(model_filename)
+            MODEL_LOADED = True
+            print(f"✅ Loaded {CURRENT_ALGORITHM} model")
+        else:
+            print(f"⚠️ No trained model found for {CURRENT_ALGORITHM}")
+            MODEL_LOADED = False
+    except Exception as e:
+        print(f"⚠️ Error loading model: {e}")
+        MODEL_LOADED = False
+
+# Load model on startup
+load_current_algorithm_model()
 
 
 @router.post("/predict", tags=["Prediction"])
@@ -135,16 +159,20 @@ async def batch_predict(code_samples: List[Dict]):
 
 @router.get("/model-info", tags=["Model Management"])
 async def get_model_info():
-    """Get information about the loaded model"""
+    """Get information about the current algorithm's loaded model and its dataset"""
     try:
-        results_file = "app/models/saved_models/training_results.json"
+        global CURRENT_ALGORITHM
+        
+        # Get the algorithm-specific training results file
+        results_file = f"app/models/saved_models/{CURRENT_ALGORITHM}_training_results.json"
         
         if not os.path.exists(results_file):
             return JSONResponse(content={
                 "model_loaded": MODEL_LOADED,
-                "algorithm": trainer.algorithm_name,
-                "current_algorithm": trainer.algorithm_name or "random_forest",
-                "status": "No training data available"
+                "algorithm": CURRENT_ALGORITHM,
+                "current_algorithm": CURRENT_ALGORITHM,
+                "status": f"No training data available for {CURRENT_ALGORITHM}",
+                "message": f"Please train the {CURRENT_ALGORITHM} model first"
             })
         
         with open(results_file, 'r') as f:
@@ -152,8 +180,8 @@ async def get_model_info():
         
         return JSONResponse(content={
             "model_loaded": MODEL_LOADED,
-            "algorithm": trainer.algorithm_name,
-            "current_algorithm": trainer.algorithm_name or "random_forest",
+            "algorithm": CURRENT_ALGORITHM,
+            "current_algorithm": CURRENT_ALGORITHM,
             "training_timestamp": training_results.get('timestamp'),
             "metrics": training_results.get('metrics'),
             "dataset_info": training_results.get('dataset'),
@@ -209,7 +237,7 @@ async def get_available_algorithms():
         
         return JSONResponse(content={
             "algorithms": algorithms,
-            "current_algorithm": trainer.algorithm_name or "random_forest"
+            "current_algorithm": CURRENT_ALGORITHM
         })
     
     except Exception as e:
@@ -218,8 +246,10 @@ async def get_available_algorithms():
 
 @router.post("/select-algorithm", tags=["Model Management"])
 async def select_algorithm(request: Dict):
-    """Select which algorithm to use for training"""
+    """Select which algorithm to use for training and load its model"""
     try:
+        global trainer, CURRENT_ALGORITHM, MODEL_LOADED
+        
         algorithm = request.get('algorithm', 'random_forest')
         
         valid_algorithms = ['random_forest', 'gradient_boosting', 'xgboost', 'svm', 'logistic_regression']
@@ -231,9 +261,24 @@ async def select_algorithm(request: Dict):
         with open("app/models/saved_models/selected_algorithm.json", "w") as f:
             json.dump({"selected_algorithm": algorithm}, f)
         
+        # Update current algorithm and try to load its model
+        CURRENT_ALGORITHM = algorithm
+        model_filename = f"{algorithm}_model.pkl"
+        model_path = os.path.join("app/models/saved_models", model_filename)
+        
+        if os.path.exists(model_path):
+            trainer = ModelTrainer()
+            trainer.load_model(model_filename)
+            MODEL_LOADED = True
+            model_status = "loaded"
+        else:
+            MODEL_LOADED = False
+            model_status = "not_trained"
+        
         return JSONResponse(content={
             "selected_algorithm": algorithm,
-            "message": f"Algorithm switched to {algorithm}"
+            "model_status": model_status,
+            "message": f"Algorithm switched to {algorithm}. Model status: {model_status}"
         })
     
     except HTTPException as e:
@@ -250,9 +295,11 @@ async def retrain_model(request: Dict):
     Request body:
     - **algorithm**: Algorithm to use (random_forest, gradient_boosting, xgboost, svm, logistic_regression)
     - **dataset_size**: Total number of samples (split 50-50)
+    
+    Each algorithm gets its own independent dataset stored as {algorithm}_dataset.npz
     """
     try:
-        global trainer
+        global trainer, CURRENT_ALGORITHM, MODEL_LOADED
         
         algorithm = request.get('algorithm', 'random_forest')
         dataset_size = request.get('dataset_size', 800)
@@ -262,14 +309,25 @@ async def retrain_model(request: Dict):
         if algorithm not in valid_algorithms:
             raise HTTPException(status_code=400, detail=f"Invalid algorithm. Must be one of: {', '.join(valid_algorithms)}")
         
-        print(f"Retraining {algorithm} model with {dataset_size} samples...")
+        print(f"🔄 Retraining {algorithm} model with {dataset_size} samples...")
+        print(f"📊 Generating independent dataset for {algorithm}...")
         
-        # Generate new dataset
+        # Generate algorithm-specific dataset (unique for each algorithm)
         generator = DatasetGenerator()
-        X_train, X_test, y_train, y_test = generator.generate_dataset(
-            optimized_count=dataset_size // 2,
-            unoptimized_count=dataset_size // 2
-        )
+        X_train, X_test, y_train, y_test = generator.generate_algorithm_specific_dataset(algorithm)
+        
+        # Calculate actual dataset distribution
+        optimized_samples = int(np.sum(y_train)) + int(np.sum(y_test))
+        unoptimized_samples = int(len(y_train) - np.sum(y_train)) + int(len(y_test) - np.sum(y_test))
+        total_samples = optimized_samples + unoptimized_samples
+        
+        print(f"📊 Dataset Distribution for {algorithm}:")
+        print(f"   🟢 Optimized samples: {optimized_samples}")
+        print(f"   🔴 Unoptimized samples: {unoptimized_samples}")
+        print(f"   📈 Ratio: {optimized_samples}:{unoptimized_samples}")
+        
+        # Save dataset specific to this algorithm
+        dataset_path = generator.save_algorithm_dataset(X_train, X_test, y_train, y_test, algorithm)
         
         # Train new model
         trainer = ModelTrainer()
@@ -281,15 +339,16 @@ async def retrain_model(request: Dict):
         # Save model
         model_path = trainer.save_model(f"{algorithm}_model.pkl")
         
-        # Save training results
+        # Save algorithm-specific training results
         feature_importance = trainer.get_feature_importance()
         results = {
             "timestamp": datetime.utcnow().isoformat(),
             "algorithm": algorithm,
+            "dataset_file": dataset_path,
             "dataset": {
-                "total_samples": dataset_size,
-                "optimized_samples": dataset_size // 2,
-                "unoptimized_samples": dataset_size // 2,
+                "total_samples": total_samples,
+                "optimized_samples": optimized_samples,
+                "unoptimized_samples": unoptimized_samples,
                 "train_size": len(X_train),
                 "test_size": len(X_test)
             },
@@ -298,18 +357,36 @@ async def retrain_model(request: Dict):
             "feature_names": trainer.feature_names
         }
         
-        results_file = "app/models/saved_models/training_results.json"
+        # Save to algorithm-specific results file
+        results_file = f"app/models/saved_models/{algorithm}_training_results.json"
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
+        # Also update the general training results file
+        general_results_file = "app/models/saved_models/training_results.json"
+        with open(general_results_file, 'w') as f:
+            json.dump(results, f, indent=2)
+        
+        # Update current algorithm
+        CURRENT_ALGORITHM = algorithm
+        MODEL_LOADED = True
+        
+        # Save selected algorithm
+        with open("app/models/saved_models/selected_algorithm.json", "w") as f:
+            json.dump({"selected_algorithm": algorithm}, f)
+        
+        print(f"✅ {algorithm} training complete with independent dataset")
+        
         return JSONResponse(content={
-            "message": f"Model ({algorithm}) retrained successfully",
+            "message": f"Model ({algorithm}) retrained successfully with independent dataset",
             "algorithm": algorithm,
             "model_path": model_path,
+            "dataset_path": dataset_path,
             "metrics": metrics,
             "dataset_info": {
                 "training_samples": len(X_train),
-                "testing_samples": len(X_test)
+                "testing_samples": len(X_test),
+                "algorithm_specific": True
             }
         })
     
@@ -411,9 +488,55 @@ async def download_dataset(dataset_name: str):
             })
         else:
             raise HTTPException(status_code=400, detail=f"Failed to download dataset {dataset_name}")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download dataset: {str(e)}")
+
+
+@router.get("/datasets/status", tags=["Model Management"])
+async def get_datasets_status():
+    """Get status of all algorithm-specific datasets"""
+    try:
+        model_dir = "app/models/saved_models"
+        datasets_info = {}
+        
+        algorithms = ['random_forest', 'gradient_boosting', 'xgboost', 'svm', 'logistic_regression']
+        
+        for algo in algorithms:
+            dataset_path = os.path.join(model_dir, f"{algo}_dataset.npz")
+            results_path = os.path.join(model_dir, f"{algo}_training_results.json")
+            
+            dataset_exists = os.path.exists(dataset_path)
+            results_exists = os.path.exists(results_path)
+            
+            datasets_info[algo] = {
+                "algorithm": algo,
+                "dataset_exists": dataset_exists,
+                "dataset_path": dataset_path if dataset_exists else None,
+                "dataset_size": os.path.getsize(dataset_path) if dataset_exists else 0,
+                "has_training_results": results_exists,
+                "training_results_path": results_path if results_exists else None
+            }
+            
+            # Load training results if available
+            if results_exists:
+                try:
+                    with open(results_path, 'r') as f:
+                        results = json.load(f)
+                        datasets_info[algo]["dataset_info"] = results.get("dataset", {})
+                        datasets_info[algo]["metrics"] = results.get("metrics", {})
+                        datasets_info[algo]["timestamp"] = results.get("timestamp")
+                except:
+                    pass
+        
+        return JSONResponse(content={
+            "message": "Algorithm datasets status",
+            "datasets": datasets_info
+        })
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error downloading dataset: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get datasets status: {str(e)}")
 
 
 @router.get("/datasets/local", tags=["Datasets"])
@@ -427,4 +550,3 @@ async def get_local_datasets():
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list local datasets: {str(e)}")
-    return recommendations

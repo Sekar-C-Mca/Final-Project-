@@ -18,60 +18,179 @@ const MLTraining = () => {
   const [showAlgorithmAnalysis, setShowAlgorithmAnalysis] = useState(false);
   const [currentAlgorithm, setCurrentAlgorithm] = useState('random_forest');
   const [trainingAlgorithm, setTrainingAlgorithm] = useState('random_forest');
+  const [datasetsStatus, setDatasetsStatus] = useState(null);
+  const [realTimeData, setRealTimeData] = useState([]);
+  const [predictionDistribution, setPredictionDistribution] = useState([
+    { name: 'Optimized', value: 0, fill: 'var(--success)' },
+    { name: 'Unoptimized', value: 0, fill: 'var(--danger)' }
+  ]);
 
-  const sampleMetrics = [
-    {
-      name: 'Well-Written Code',
-      loc: 150,
-      complexity: 10,
-      dependencies: 2,
-      functions: 12,
-      classes: 3,
-      comments: 30,
-      complexity_per_loc: 0.067,
-      comment_ratio: 0.20,
-      functions_per_class: 4.0,
-      type: 'optimized'
-    },
-    {
-      name: 'Complex Code',
-      loc: 500,
-      complexity: 45,
-      dependencies: 10,
-      functions: 5,
-      classes: 6,
-      comments: 20,
-      complexity_per_loc: 0.09,
-      comment_ratio: 0.04,
-      functions_per_class: 0.83,
-      type: 'unoptimized'
-    },
-    {
-      name: 'Medium Complexity',
-      loc: 300,
-      complexity: 22,
-      dependencies: 5,
-      functions: 9,
-      classes: 4,
-      comments: 50,
-      complexity_per_loc: 0.073,
-      comment_ratio: 0.167,
-      functions_per_class: 2.25,
-      type: 'medium'
+  const fetchRealTimePredictions = async (algorithm = currentAlgorithm) => {
+    try {
+      console.log(`Fetching real-time predictions for algorithm: ${algorithm}`);
+      setLoading(true);
+
+      // First select the algorithm
+      try {
+        const selectResponse = await fetch('http://localhost:8000/api/ml/select-algorithm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ algorithm: algorithm })
+        });
+        
+        if (!selectResponse.ok) {
+          const errorText = await selectResponse.text();
+          console.error('Select algorithm error response:', errorText);
+          throw new Error(`Failed to select algorithm: ${selectResponse.status} - ${errorText}`);
+        }
+      } catch (selectError) {
+        console.error('Algorithm selection failed:', selectError);
+      }
+
+      // Try to fetch recent analysis results from our real-time monitoring
+      let realTimeResults = [];
+      
+      // First, try to get real monitored data
+      try {
+        const monitorResponse = await fetch('http://localhost:8000/api/recent-analyses', {
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (monitorResponse.ok) {
+          const monitorData = await monitorResponse.json();
+          console.log('Real-time monitor data:', monitorData);
+          
+          if (monitorData.analyses && monitorData.analyses.length > 0) {
+            realTimeResults = monitorData.analyses.map((analysis, index) => {
+              // Support both new format (extracted_features dict) and old format (features array)
+              const ef = analysis.extracted_features || {};
+              const fv = analysis.feature_vector || analysis.features || [];
+              const fname = analysis.filename || analysis.file_path?.split('/').pop() || `file_${index + 1}`;
+              
+              return {
+                name: fname,
+                filename: fname,
+                loc: ef.LOC ?? fv[0] ?? 0,
+                complexity: ef.Complexity ?? fv[1] ?? 0,
+                dependencies: ef.Dependencies ?? fv[2] ?? 0,
+                functions: ef.Functions ?? fv[3] ?? 0,
+                classes: ef.Classes ?? fv[4] ?? 0,
+                comments: ef.Comments ?? fv[5] ?? 0,
+                complexity_per_loc: ef['Complexity/LOC'] ?? fv[6] ?? 0,
+                comment_ratio: ef['Comment Ratio'] ?? fv[7] ?? 0,
+                functions_per_class: ef['Functions/Class'] ?? fv[8] ?? 0,
+                predictions: analysis.predictions || {},
+                consensus: analysis.consensus || { risk_level: 'unknown', confidence: 0 },
+                feature_importance: analysis.feature_importance || {},
+                timestamp: analysis.timestamp,
+                actualType: analysis.consensus?.risk_level === 'low' ? 'optimized' : 
+                           analysis.consensus?.risk_level === 'high' ? 'unoptimized' : 
+                           analysis.consensus?.risk_level || 'unknown'
+              };
+            });
+          }
+        }
+      } catch (monitorError) {
+        console.log('No real-time monitor data available, using demonstration data');
+      }
+
+      // If no real data, show empty state (no fake demo data)
+      if (realTimeResults.length === 0) {
+        console.log('No real monitoring data available');
+      }
+
+      setPredictions(realTimeResults);
+      setRealTimeData(realTimeResults);
+
+      // Update distribution based on predictions
+      const optimizedCount = realTimeResults.filter(p => 
+        p.is_optimized || p.actualType === 'optimized' || p.consensus?.risk_level === 'low'
+      ).length;
+      const unoptimizedCount = realTimeResults.length - optimizedCount;
+
+      setPredictionDistribution([
+        { name: 'Optimized', value: optimizedCount, fill: 'var(--success)' },
+        { name: 'Unoptimized', value: unoptimizedCount, fill: 'var(--danger)' }
+      ]);
+
+    } catch (error) {
+      console.error('Error fetching real-time predictions:', error);
+      setError(`Failed to fetch predictions: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   useEffect(() => {
-    fetchModelInfo();
-    fetchPredictions();
+    console.log(`MLTraining component mounted or algorithm changed: ${currentAlgorithm}`);
+    if (currentAlgorithm) {
+      fetchModelInfo(currentAlgorithm);
+      fetchRealTimePredictions(currentAlgorithm);
+      fetchDatasetsStatus();
+    }
   }, [currentAlgorithm]);
 
-  const fetchModelInfo = async () => {
+  // Also fetch datasets status on initial load and set up periodic updates
+  useEffect(() => {
+    console.log('Initial datasets fetch on component mount');
+    fetchDatasetsStatus();
+    
+    // Set up periodic refresh for real-time data
+    const interval = setInterval(() => {
+      if (currentAlgorithm) {
+        fetchRealTimePredictions(currentAlgorithm);
+      }
+    }, 10000); // Update every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentAlgorithm]);
+
+  const fetchModelInfo = async (algorithm = currentAlgorithm) => {
     try {
+      console.log(`Fetching model info for algorithm: ${algorithm}`);
+      // First select the algorithm, then get its info
+      const selectResponse = await fetch('http://localhost:8000/api/ml/select-algorithm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ algorithm: algorithm })
+      });
+      
+      if (!selectResponse.ok) {
+        const errorText = await selectResponse.text();
+        console.error('Select algorithm error response:', errorText);
+        throw new Error(`Failed to select algorithm: ${selectResponse.status} - ${errorText}`);
+      }
+      
+      const selectResult = await selectResponse.json();
+      console.log('Algorithm selection successful:', selectResult);
+      
+      // Now fetch the model info for the selected algorithm
       const response = await fetch('http://localhost:8000/api/ml/model-info');
-      if (!response.ok) throw new Error('Failed to fetch model info');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Model info error response:', errorText);
+        throw new Error(`Failed to fetch model info: ${response.status} - ${errorText}`);
+      }
+      
       const data = await response.json();
+      console.log('Model info received:', data);
       setModelInfo(data);
+      
+      // Update prediction distribution based on algorithm-specific dataset
+      if (data.dataset_info) {
+        const optimized = data.dataset_info.optimized_samples || 0;
+        const unoptimized = data.dataset_info.unoptimized_samples || 0;
+        setPredictionDistribution([
+          { name: 'Optimized', value: optimized, fill: 'var(--success)' },
+          { name: 'Unoptimized', value: unoptimized, fill: 'var(--danger)' }
+        ]);
+        console.log('Updated prediction distribution:', { optimized, unoptimized });
+      }
+      
       // Don't override currentAlgorithm - keep user's selection
       setLoading(false);
     } catch (err) {
@@ -81,40 +200,33 @@ const MLTraining = () => {
     }
   };
 
-  const fetchPredictions = async () => {
+  const fetchDatasetsStatus = async () => {
     try {
-      const results = [];
-      for (const sample of sampleMetrics) {
-        const metricsForAPI = {
-          loc: sample.loc,
-          complexity: sample.complexity,
-          dependencies: sample.dependencies,
-          functions: sample.functions,
-          classes: sample.classes,
-          comments: sample.comments,
-          complexity_per_loc: sample.complexity_per_loc,
-          comment_ratio: sample.comment_ratio,
-          functions_per_class: sample.functions_per_class
-        };
-
-        const response = await fetch('http://localhost:8000/api/ml/predict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(metricsForAPI)
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          results.push({
-            name: sample.name,
-            ...data,
-            actualType: sample.type
-          });
-        }
+      console.log('Fetching datasets status...');
+      const response = await fetch('http://localhost:8000/api/ml/datasets/status');
+      console.log('Response status:', response.status);
+      if (!response.ok) throw new Error(`Failed to fetch datasets status: ${response.status}`);
+      const data = await response.json();
+      console.log('Datasets data received:', data);
+      if (data.datasets) {
+        setDatasetsStatus(data.datasets);
+        console.log('Datasets state updated with', Object.keys(data.datasets).length, 'algorithms');
       }
-      setPredictions(results);
     } catch (err) {
-      console.error('Error fetching predictions:', err);
+      console.error('Error fetching datasets status:', err);
+      // Retry after 2 seconds
+      setTimeout(() => {
+        console.log('Retrying fetch...');
+        fetch('http://localhost:8000/api/ml/datasets/status')
+          .then(r => r.json())
+          .then(d => {
+            if (d.datasets) {
+              console.log('Retry successful, updating state');
+              setDatasetsStatus(d.datasets);
+            }
+          })
+          .catch(e => console.error('Retry failed:', e));
+      }, 2000);
     }
   };
 
@@ -133,10 +245,11 @@ const MLTraining = () => {
       if (!response.ok) throw new Error('Retraining failed');
       
       const data = await response.json();
-      alert(`Model (${data.algorithm}) retrained successfully!`);
+      alert(`Model (${data.algorithm}) retrained successfully with independent dataset!`);
       setCurrentAlgorithm(data.algorithm);
       fetchModelInfo();
-      fetchPredictions();
+      fetchRealTimePredictions(); // Use the new real-time function
+      fetchDatasetsStatus();
     } catch (err) {
       alert(`Retraining error: ${err.message}`);
     } finally {
@@ -145,11 +258,15 @@ const MLTraining = () => {
   };
 
   const handleAlgorithmSelect = (algorithm) => {
+    console.log(`Algorithm selected: ${algorithm}`);
     setTrainingAlgorithm(algorithm);
     setCurrentAlgorithm(algorithm);
     setShowAlgorithmSelector(false);
-    fetchModelInfo();
-    fetchPredictions();
+    
+    // Fetch algorithm-specific data
+    fetchModelInfo(algorithm);
+    fetchRealTimePredictions(algorithm);
+    fetchDatasetsStatus();
   };
 
   if (loading) {
@@ -176,13 +293,65 @@ const MLTraining = () => {
         }))
     : [];
 
-  const optimizedCount = predictions.filter(p => p.is_optimized).length;
-  const unoptimizedCount = predictions.filter(p => !p.is_optimized).length;
+  // Get algorithm-specific insights for features
+  const getFeatureInsight = (featureName, algorithm) => {
+    const insights = {
+      'LOC': {
+        'random_forest': 'Tree-based models see larger codebases as potentially less optimized.',
+        'gradient_boosting': 'Gradient boosting focuses on gradual complexity reduction in large files.',
+        'xgboost': 'XGBoost efficiently handles high-dimensional LOC features.',
+        'svm': 'SVM with linear kernel finds LOC boundaries for optimization classification.',
+        'logistic_regression': 'Linear relationship between code size and optimization probability.'
+      },
+      'Complexity': {
+        'random_forest': 'Most critical factor for tree splits - high complexity indicates poor optimization.',
+        'gradient_boosting': 'Complexity reduction is key focus in boosting iterations.',
+        'xgboost': 'Advanced complexity handling with regularization prevents overfitting.',
+        'svm': 'Linear separation based on complexity thresholds for optimization.',
+        'logistic_regression': 'Linear coefficient shows direct complexity impact on optimization odds.'
+      },
+      'Dependencies': {
+        'random_forest': 'High coupling affects optimization - important tree decision factor.',
+        'gradient_boosting': 'Gradual learning of dependency patterns across boosting rounds.',
+        'xgboost': 'Efficient handling of dependency interactions with feature importance.',
+        'svm': 'Clear dependency boundaries separate optimized from unoptimized code.',
+        'logistic_regression': 'Linear dependency impact on optimization probability.'
+      },
+      'Comment Ratio': {
+        'random_forest': 'Well-documented code strongly correlates with optimization in tree decisions.',
+        'gradient_boosting': 'Documentation quality emerges as key factor through boosting.',
+        'xgboost': 'Comment ratio shows highest importance - documentation drives optimization.',
+        'svm': 'Clear linear relationship between documentation and code optimization.',
+        'logistic_regression': 'Strong positive coefficient for comment ratio in optimization prediction.'
+      },
+      'Functions': {
+        'random_forest': 'Function count splits help identify well-structured code.',
+        'gradient_boosting': 'Function organization patterns learned through gradient descent.',
+        'xgboost': 'Function structure efficiently captured by XGBoost feature selection.',
+        'svm': 'Function count provides clear optimization classification boundaries.',
+        'logistic_regression': 'Linear relationship between function organization and optimization.'
+      },
+      'Classes': {
+        'random_forest': 'Class structure influences tree-based optimization decisions.',
+        'gradient_boosting': 'Object-oriented design patterns emerge through boosting.',
+        'xgboost': 'Class organization efficiently handled by advanced tree methods.',
+        'svm': 'Class count boundaries help separate optimized code.',
+        'logistic_regression': 'Linear impact of class design on optimization probability.'
+      },
+      'Comments': {
+        'random_forest': 'Comment count is major factor in tree-based optimization prediction.',
+        'gradient_boosting': 'Documentation volume shows high importance in boosting.',
+        'xgboost': 'Comment analysis reveals strong optimization correlation.',
+        'svm': 'Comment count provides clear optimization classification.',
+        'logistic_regression': 'Direct linear relationship between comments and optimization.'
+      }
+    };
 
-  const predictionDistribution = [
-    { name: 'Optimized', value: optimizedCount, fill: 'var(--success)' },
-    { name: 'Unoptimized', value: unoptimizedCount, fill: 'var(--danger)' }
-  ];
+    const defaultInsight = 'Important factor in determining code optimization quality.';
+    return insights[featureName]?.[algorithm] || defaultInsight;
+  };
+
+  // Prediction distribution is now managed by state and updated from algorithm-specific dataset info
 
   return (
     <>
@@ -199,9 +368,25 @@ const MLTraining = () => {
               <select 
                 id="algorithm-dropdown"
                 value={currentAlgorithm}
-                onChange={(e) => {
-                  setCurrentAlgorithm(e.target.value);
-                  setTrainingAlgorithm(e.target.value);
+                onChange={async (e) => {
+                  const newAlgorithm = e.target.value;
+                  console.log(`Algorithm changed to: ${newAlgorithm}`);
+                  setCurrentAlgorithm(newAlgorithm);
+                  setTrainingAlgorithm(newAlgorithm);
+                  setLoading(true);
+                  setError(null);
+                  
+                  try {
+                    // Fetch algorithm-specific data
+                    await fetchModelInfo(newAlgorithm);
+                    await fetchRealTimePredictions(newAlgorithm);
+                    fetchDatasetsStatus(); // This can run async
+                  } catch (error) {
+                    console.error('Error during algorithm change:', error);
+                    setError(error.message);
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
                 className="algorithm-dropdown"
               >
@@ -260,6 +445,16 @@ const MLTraining = () => {
             <Code size={18} />
             Predictions
           </button>
+          <button 
+            className={`tab-btn ${selectedTab === 'datasets' ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedTab('datasets');
+              fetchDatasetsStatus();
+            }}
+          >
+            <BarChart3 size={18} />
+            Datasets
+          </button>
         </div>
 
         {selectedTab === 'overview' && (
@@ -304,24 +499,32 @@ const MLTraining = () => {
                 <div className="info-row">
                   <span className="label">Algorithm</span>
                   <span className="value algo-value">
-                    {trainingAlgorithm.replace('_', ' ').toUpperCase()}
+                    {(modelInfo?.algorithm || currentAlgorithm).replace('_', ' ').toUpperCase()}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Training Samples</span>
                   <span className="value">
-                    {modelInfo?.available_models?.[trainingAlgorithm]?.dataset_info?.train_size || 640}
+                    {modelInfo?.dataset_info?.train_size || 0}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Test Samples</span>
                   <span className="value">
-                    {modelInfo?.available_models?.[trainingAlgorithm]?.dataset_info?.test_size || 160}
+                    {modelInfo?.dataset_info?.test_size || 0}
+                  </span>
+                </div>
+                <div className="info-row">
+                  <span className="label">Dataset Ratio (Opt:Unopt)</span>
+                  <span className="value">
+                    {(modelInfo?.dataset_info?.optimized_samples || 0)}:{(modelInfo?.dataset_info?.unoptimized_samples || 0)}
                   </span>
                 </div>
                 <div className="info-row">
                   <span className="label">Status</span>
-                  <span className="value" style={{ color: 'var(--success)' }}>Active</span>
+                  <span className="value" style={{ color: modelInfo?.model_loaded ? 'var(--success)' : 'var(--warning)' }}>
+                    {modelInfo?.model_loaded ? 'Active' : 'Not Trained'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -357,8 +560,8 @@ const MLTraining = () => {
           <div className="tab-content">
             {featureImportanceData.length > 0 ? (
               <div className="chart-section">
-                <h2>Feature Importance Analysis</h2>
-                <p className="section-subtitle">Features with the most impact on optimization predictions</p>
+                <h2>Feature Importance Analysis - {currentAlgorithm.replace('_', ' ').toUpperCase()}</h2>
+                <p className="section-subtitle">Features with the most impact on optimization predictions for {currentAlgorithm.replace('_', ' ')} algorithm</p>
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={featureImportanceData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -370,81 +573,266 @@ const MLTraining = () => {
                 </ResponsiveContainer>
 
                 <div className="insights-section">
-                  <h3>Key Insights</h3>
+                  <h3>Key Insights for {currentAlgorithm.replace('_', ' ').toUpperCase()}</h3>
                   <ul>
-                    <li><strong>Complexity (34%)</strong>: Most critical factor. Simplify complex functions.</li>
-                    <li><strong>Comment Ratio (29%)</strong>: Well-documented code is preferred.</li>
-                    <li><strong>Dependencies (27%)</strong>: High coupling affects optimization.</li>
-                    <li><strong>Code Structure</strong>: Function and class design matters.</li>
+                    {featureImportanceData.slice(0, 4).map((feature, idx) => (
+                      <li key={idx}>
+                        <strong>{feature.name} ({feature.importance}%)</strong>: {getFeatureInsight(feature.name, currentAlgorithm)}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
             ) : (
-              <p>No feature importance data available</p>
+              <div className="no-data-message">
+                <p>No feature importance data available for {currentAlgorithm.replace('_', ' ')} algorithm</p>
+                <p>Try retraining the model to generate feature importance data.</p>
+              </div>
             )}
           </div>
         )}
 
         {selectedTab === 'predictions' && (
           <div className="tab-content">
-            <h2>Sample Code Analysis</h2>
-            <div className="predictions-grid">
-              {predictions.map((pred, idx) => (
-                <div 
-                  key={idx} 
-                  className={`prediction-card ${pred.is_optimized ? 'success' : 'danger'}`}
-                >
-                  <div className="card-title">
-                    <h3>{pred.name}</h3>
-                    <div className={`badge ${pred.is_optimized ? 'badge-success' : 'badge-danger'}`}>
-                      {pred.is_optimized ? 'Optimized' : 'Unoptimized'}
-                    </div>
-                  </div>
-
-                  <div className="confidence-meter">
-                    <div className="confidence-label">
-                      <span>Confidence</span>
-                      <span className="confidence-value">{pred.confidence}</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div 
-                        className={`progress-fill ${pred.is_optimized ? 'success' : 'danger'}`}
-                        style={{ width: `${parseFloat(pred.confidence_score) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  <div className="metrics-list">
-                    <div className="metric-row">
-                      <span>Lines of Code</span>
-                      <strong>{pred.input_metrics.loc}</strong>
-                    </div>
-                    <div className="metric-row">
-                      <span>Complexity</span>
-                      <strong>{pred.input_metrics.complexity}</strong>
-                    </div>
-                    <div className="metric-row">
-                      <span>Comment Ratio</span>
-                      <strong>{(pred.input_metrics.comment_ratio * 100).toFixed(1)}%</strong>
-                    </div>
-                    <div className="metric-row">
-                      <span>Dependencies</span>
-                      <strong>{pred.input_metrics.dependencies}</strong>
-                    </div>
-                  </div>
-
-                  {pred.recommendations && pred.recommendations.length > 0 && (
-                    <div className="recommendations-list">
-                      <h4>Recommendations</h4>
-                      <ul>
-                        {pred.recommendations.slice(0, 2).map((rec, i) => (
-                          <li key={i}>{rec}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+            <div className="predictions-header">
+              <h2>Real-Time Code Analysis</h2>
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => fetchRealTimePredictions(currentAlgorithm)}
+                disabled={loading}
+              >
+                <RefreshCw size={16} />
+                Refresh Data
+              </button>
+            </div>
+            
+            {realTimeData.length > 0 && (
+              <div className="real-time-notice">
+                <div className="notice-content">
+                  <CheckCircle size={16} />
+                  <span>Showing {realTimeData.length} analyzed files from monitoring system</span>
                 </div>
-              ))}
+                <div className="last-updated">
+                  Last updated: {new Date().toLocaleTimeString()}
+                </div>
+              </div>
+            )}
+
+            {realTimeData.length > 0 ? (
+              <div className="predictions-grid">
+                {realTimeData.map((pred, idx) => {
+                // Determine prediction status
+                const riskLevel = pred.consensus?.risk_level || pred.actualType || 'unknown';
+                const isOptimized = riskLevel === 'low' || pred.is_optimized || pred.actualType === 'optimized';
+                const rawConf = pred.consensus?.confidence ?? pred.confidence ?? 0;
+                const confidence = (typeof rawConf === 'number' && !isNaN(rawConf)) ? rawConf : 0;
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className={`prediction-card ${isOptimized ? 'success' : 'danger'}`}
+                  >
+                    <div className="card-title">
+                      <h3>{pred.filename || pred.name}</h3>
+                      <div className={`badge ${isOptimized ? 'badge-success' : 'badge-danger'}`}>
+                        {isOptimized ? 'Optimized' : 'Unoptimized'}
+                      </div>
+                    </div>
+
+                    <div className="confidence-meter">
+                      <div className="confidence-label">
+                        <span>Confidence</span>
+                        <span className="confidence-value">
+                          {(confidence * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="progress-bar">
+                        <div 
+                          className={`progress-fill ${isOptimized ? 'success' : 'danger'}`}
+                          style={{ width: `${confidence * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="metrics-list">
+                      <div className="metric-row">
+                        <span>Lines of Code</span>
+                        <strong>{pred.loc}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Complexity</span>
+                        <strong>{pred.complexity}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Comment Ratio</span>
+                        <strong>{(Number(pred.comment_ratio || 0) * 100).toFixed(1)}%</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Dependencies</span>
+                        <strong>{pred.dependencies}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Functions</span>
+                        <strong>{pred.functions}</strong>
+                      </div>
+                      <div className="metric-row">
+                        <span>Classes</span>
+                        <strong>{pred.classes}</strong>
+                      </div>
+                    </div>
+
+                    {pred.predictions && Object.keys(pred.predictions).length > 0 && (
+                      <div className="algorithm-predictions">
+                        <h4>Algorithm Predictions</h4>
+                        {Object.entries(pred.predictions).map(([algo, prediction]) => {
+                          const risk = prediction.risk_level || 'unknown';
+                          const conf = (typeof prediction.confidence === 'number' && !isNaN(prediction.confidence)) ? prediction.confidence : 0;
+                          const riskEmoji = {'low': '🟢', 'medium': '🟡', 'high': '🔴'}[risk] || '⚪';
+                          
+                          return (
+                            <div key={algo} className="algo-prediction">
+                              <span>{algo.replace('_', ' ').toUpperCase()}</span>
+                              <div className="risk-indicator">
+                                {riskEmoji} {risk.toUpperCase()} ({(conf * 100).toFixed(1)}%)
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {pred.recommendations && pred.recommendations.length > 0 && (
+                      <div className="recommendations-list">
+                        <h4>Recommendations</h4>
+                        <ul>
+                          {pred.recommendations.slice(0, 2).map((rec, i) => (
+                            <li key={i}>{rec}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              </div>
+            ) : (
+              <div className="loading-state">
+                <AlertCircle size={32} style={{color: 'var(--info)', marginBottom: '10px'}} />
+                <h3>No Monitoring Data Available</h3>
+                <p>Start monitoring a project folder to see real-time ML analysis</p>
+                <div style={{marginTop: '15px', textAlign: 'left', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #ddd'}}>
+                  <h4 style={{margin: '0 0 10px 0', color: '#333'}}>To get started:</h4>
+                  <ol style={{margin: 0, paddingLeft: '20px'}}>
+                    <li>Go to Deploy Script page</li>
+                    <li>Select a project folder to monitor</li>
+                    <li>Click "Start Monitoring"</li>
+                    <li>Make code changes to generate analysis data</li>
+                    <li>Return here and click "Refresh Data"</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedTab === 'datasets' && (
+          <div className="tab-content">
+            <div className="info-section">
+              <h2>Algorithm Datasets</h2>
+              <p className="text-muted">Each algorithm has its own individual dataset for training and evaluation</p>
+              
+              {datasetsStatus?.datasets && Object.keys(datasetsStatus.datasets).length > 0 ? (
+                <div className="datasets-grid">
+                  {Object.entries(datasetsStatus.datasets).map(([algo, info]) => (
+                    <div key={algo} className={`dataset-card ${info.dataset_exists ? 'active' : 'inactive'}`}>
+                      <div className="dataset-header">
+                        <h3>{algo.replace('_', ' ').toUpperCase()}</h3>
+                        <span className={`status-badge ${info.dataset_exists ? 'success' : 'warning'}`}>
+                          {info.dataset_exists ? '✓ Available' : '○ Not Trained'}
+                        </span>
+                      </div>
+                      
+                      {info.dataset_exists && (
+                        <>
+                          <div className="dataset-info">
+                            <div className="info-item">
+                              <span className="label">Dataset File</span>
+                              <span className="value">{algo}_dataset.npz</span>
+                            </div>
+                            <div className="info-item">
+                              <span className="label">File Size</span>
+                              <span className="value">{(info.dataset_size / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                          </div>
+
+                          {info.dataset_info && (
+                            <>
+                              <div className="dataset-stats">
+                                <div className="stat-item">
+                                  <span className="stat-label">Total Samples</span>
+                                  <span className="stat-value">{info.dataset_info.total_samples}</span>
+                                </div>
+                                <div className="stat-item">
+                                  <span className="stat-label">Training Samples</span>
+                                  <span className="stat-value">{info.dataset_info.train_size}</span>
+                                </div>
+                                <div className="stat-item">
+                                  <span className="stat-label">Test Samples</span>
+                                  <span className="stat-value">{info.dataset_info.test_size}</span>
+                                </div>
+                              </div>
+
+                              {info.metrics && (
+                                <div className="performance-metrics">
+                                  <h4>Performance Metrics</h4>
+                                  <div className="metrics-mini">
+                                    {info.metrics.accuracy && (
+                                      <div className="metric-mini">
+                                        <span>Accuracy</span>
+                                        <span className="value">{(info.metrics.accuracy * 100).toFixed(2)}%</span>
+                                      </div>
+                                    )}
+                                    {info.metrics.precision && (
+                                      <div className="metric-mini">
+                                        <span>Precision</span>
+                                        <span className="value">{(info.metrics.precision * 100).toFixed(2)}%</span>
+                                      </div>
+                                    )}
+                                    {info.metrics.recall && (
+                                      <div className="metric-mini">
+                                        <span>Recall</span>
+                                        <span className="value">{(info.metrics.recall * 100).toFixed(2)}%</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {info.timestamp && (
+                                <div className="dataset-timestamp">
+                                  <small>Last trained: {new Date(info.timestamp).toLocaleString()}</small>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : datasetsStatus === null ? (
+                <div className="loading-state">
+                  <div className="spinner"></div>
+                  <p>Loading datasets status...</p>
+                  <small style={{marginTop: '10px', color: '#888'}}>Connecting to ML API...</small>
+                </div>
+              ) : (
+                <div className="loading-state">
+                  <AlertCircle size={32} style={{color: 'var(--warning)', marginBottom: '10px'}} />
+                  <p>No datasets available yet</p>
+                  <small style={{marginTop: '10px', color: '#888'}}>Train a model to generate datasets</small>
+                </div>
+              )}
             </div>
           </div>
         )}

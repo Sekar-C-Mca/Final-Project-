@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-11T14:05:43.942208",
+  "algorithm": "random_forest",
+  "dataset_file": "app/models/saved_models/random_forest_dataset.npz",
+  "dataset": {
+    "total_samples": 800,
+    "optimized_samples": 350,
+    "unoptimized_samples": 450,
+    "train_size": 640,
+    "test_size": 160
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "auc_roc": 1.0
+  },
+  "feature_importance": {
+    "LOC": 0.006344911695999754,
+    "Complexity": 0.3070205994018497,
+    "Dependencies": 0.2726158370421275,
+    "Functions": 0.060690718243220455,
+    "Classes": 1.7989890219009618e-15,
+    "Comments": 0.010395878838279703,
+    "Complexity/LOC": 0.0001031453841442498,
+    "Comment Ratio": 0.29693149329363966,
+    "Functions/Class": 0.04589741610073716
+  },
+  "feature_names": [
+    "LOC",
+    "Complexity",
+    "Dependencies",
+    "Functions",
+    "Classes",
+    "Comments",
+    "Complexity/LOC",
+    "Comment Ratio",
+    "Functions/Class"
+  ]
+}
