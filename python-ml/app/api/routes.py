@@ -313,26 +313,122 @@ async def clear_recent_analyses():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear analyses: {str(e)}")
 
-def _get_recommendations(features: Dict[str, float]) -> List[str]:
-    """Generate optimization recommendations based on features"""
+def _get_recommendations(features: Dict[str, float]) -> Dict:
+    """
+    Generate comprehensive optimization recommendations and verdict based on features
+    Returns: Dictionary with verdict, summary, and detailed recommendations
+    """
     recommendations = []
+    issues = []
+    issue_count = 0
     
-    if features['Complexity'] > 15:
-        recommendations.append("Consider breaking down complex functions into smaller, more manageable pieces")
+    loc = features.get('LOC', 0)
+    complexity = features.get('Complexity', 0)
+    dependencies = features.get('Dependencies', 0)
+    comment_ratio = features.get('Comment Ratio', 0)
+    complexity_per_loc = features.get('Complexity/LOC', 0)
+    functions_per_class = features.get('Functions/Class', 0)
+    classes = features.get('Classes', 0)
     
-    if features['Comment Ratio'] < 0.1:
-        recommendations.append("Add more documentation and comments to improve code readability")
+    # Identify issues and collect recommendations
+    # Complexity issues
+    if complexity > 30:
+        issue_count += 1
+        issues.append("High cyclomatic complexity")
+        recommendations.append("🔥 HIGH COMPLEXITY: Break this function/class into smaller, more focused components. Consider extracting complex logic into separate helper functions.")
+    elif complexity > 15:
+        recommendations.append("⚠️ MODERATE COMPLEXITY: Consider breaking down complex functions into smaller, more manageable pieces")
     
-    if features['Dependencies'] > 10:
-        recommendations.append("Review dependencies - consider reducing coupling between modules")
+    # Documentation issues
+    if comment_ratio < 0.08:
+        issue_count += 1
+        issues.append("Poor documentation")
+        recommendations.append("📝 LOW DOCUMENTATION: Add more comments explaining the logic. Aim for 8-12% comment ratio.")
+    elif comment_ratio > 0.25:
+        recommendations.append("💬 EXCESSIVE COMMENTS: Review if all comments are necessary. Remove redundant explanations.")
     
-    if features['Functions/Class'] < 1 and features['Classes'] > 0:
-        recommendations.append("Classes should contain methods - consider refactoring class structure")
+    # Dependency issues
+    if dependencies > 10:
+        issue_count += 1
+        issues.append("Too many dependencies")
+        recommendations.append("🔗 HIGH COUPLING: Review and reduce external dependencies. This increases maintenance burden.")
     
-    if features['Complexity/LOC'] > 0.5:
-        recommendations.append("High complexity per line - consider simplifying logic and control flow")
+    # Size issues
+    if loc > 500:
+        issue_count += 1
+        issues.append("File too large")
+        recommendations.append("📏 LARGE MODULE: Split this file into smaller modules with single responsibilities. Aim for <300 LOC per file.")
     
-    if len(recommendations) == 0:
-        recommendations.append("Code structure looks good! Consider further optimization based on performance testing")
+    # Function structure issues
+    if functions_per_class < 1.5 and functions_per_class > 0 and classes > 0:
+        issue_count += 1
+        issues.append("Unbalanced class structure")
+        recommendations.append("🏗️ CLASS DESIGN: This class may have too many responsibilities. Consider breaking it into smaller, focused classes.")
+    elif functions_per_class > 4:
+        issue_count += 1
+        issues.append("Class is too granular")
+        recommendations.append("🏗️ OVER-FRAGMENTATION: Consider consolidating related functions into a more cohesive class structure.")
     
-    return recommendations
+    # Code density issues
+    if complexity_per_loc > 0.6:
+        issue_count += 1
+        issues.append("High code complexity density")
+        recommendations.append("💣 DENSE CODE: Simplify the logic - high complexity per line makes code hard to understand. Break into multiple functions.")
+    
+    # Determine if optimized based on simple heuristics
+    is_optimized = issue_count == 0 and complexity < 15 and comment_ratio >= 0.08
+    
+    # Generate verdict
+    verdict = {}
+    if is_optimized and issue_count == 0:
+        verdict = {
+            "status": "✅ GOOD",
+            "color": "success",
+            "title": "Your code is optimized and follows best practices!",
+            "summary": "No major issues detected. Code quality is excellent.",
+            "rating": "Excellent",
+            "score": "A+"
+        }
+    elif is_optimized and issue_count > 0:
+        verdict = {
+            "status": "⚠️ GOOD WITH IMPROVEMENTS",
+            "color": "warning",
+            "title": f"Your code is optimized but has {issue_count} area(s) for improvement",
+            "summary": f"Code is generally well-structured. Focus on: {', '.join(issues)}",
+            "rating": "Good",
+            "score": "A"
+        }
+    elif not is_optimized and issue_count <= 2:
+        verdict = {
+            "status": "⚠️ NEEDS ATTENTION",
+            "color": "warning",
+            "title": f"Code needs optimization - {issue_count} issue(s) to fix",
+            "summary": f"Key issues: {', '.join(issues)}. Address these areas for improvement.",
+            "rating": "Fair",
+            "score": "B"
+        }
+    else:
+        verdict = {
+            "status": "❌ HAS ISSUES",
+            "color": "danger",
+            "title": f"Code has {issue_count} significant issue(s) requiring attention",
+            "summary": f"Critical issues: {', '.join(issues[:3])}. Refactoring recommended.",
+            "rating": "Poor",
+            "score": "C"
+        }
+    
+    # Add positive feedback if applicable
+    if is_optimized:
+        recommendations.append("✅ Code follows optimization best practices and design patterns.")
+    
+    # Default if no issues or recommendations
+    if not recommendations:
+        recommendations.append("Code structure is reasonable. Monitor for future improvements as complexity grows.")
+    
+    return {
+        "verdict": verdict,
+        "issues": issues,
+        "issue_count": issue_count,
+        "recommendations": recommendations
+    }
+

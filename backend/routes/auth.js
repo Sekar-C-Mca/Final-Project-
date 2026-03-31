@@ -55,10 +55,42 @@ router.post(
                 }
             });
         } catch (error) {
-            console.error('Registration error:', error);
+            console.error('❌ Registration error:', error.message);
+            console.error('   Stack:', error.stack);
+            
+            // Specific error handling
+            if (error.name === 'MongooseError' || error.message.includes('MongoDB')) {
+                return res.status(503).json({
+                    success: false,
+                    message: 'Database connection error. Please ensure MongoDB is running.',
+                    error: 'MONGODB_CONNECTION_ERROR',
+                    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+                });
+            }
+            
+            if (error.code === 11000) {
+                // Duplicate key error
+                return res.status(400).json({
+                    success: false,
+                    message: 'Email already registered',
+                    error: 'DUPLICATE_EMAIL'
+                });
+            }
+            
+            if (error.name === 'ValidationError') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Validation error',
+                    error: 'VALIDATION_ERROR',
+                    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+                });
+            }
+            
             res.status(500).json({
                 success: false,
-                message: 'Server error during registration'
+                message: 'Server error during registration',
+                error: 'INTERNAL_SERVER_ERROR',
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     }
@@ -78,23 +110,41 @@ router.post(
         try {
             const { email, password } = req.body;
 
+            console.log(`🔐 Login attempt for email: ${email}`);
+
+            // Check if MongoDB is connected
+            if (!User.collection.conn.readyState) {
+                console.error('❌ MongoDB not connected');
+                return res.status(503).json({
+                    success: false,
+                    message: 'Database connection failed. Please check MongoDB connection.',
+                    error: 'MONGODB_DISCONNECTED'
+                });
+            }
+
             // Check if user exists
             const user = await User.findOne({ email }).select('+password');
             if (!user) {
+                console.warn(`⚠️  Login failed: User not found - ${email}`);
                 return res.status(401).json({
                     success: false,
                     message: 'Invalid credentials'
                 });
             }
 
+            console.log(`✅ User found: ${email}`);
+
             // Check password
             const isMatch = await user.comparePassword(password);
             if (!isMatch) {
+                console.warn(`⚠️  Login failed: Invalid password - ${email}`);
                 return res.status(401).json({
                     success: false,
                     message: 'Invalid credentials'
                 });
             }
+
+            console.log(`✅ Password matched for: ${email}`);
 
             // Create token
             const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -113,10 +163,33 @@ router.post(
                 }
             });
         } catch (error) {
-            console.error('Login error:', error);
+            console.error('❌ Login error:', error.message);
+            console.error('   Stack:', error.stack);
+            
+            // Specific error handling
+            if (error.name === 'MongooseError' || error.message.includes('MongoDB')) {
+                return res.status(503).json({
+                    success: false,
+                    message: 'Database connection error. Please ensure MongoDB is running.',
+                    error: 'MONGODB_CONNECTION_ERROR',
+                    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+                });
+            }
+            
+            if (error.name === 'JsonWebTokenError') {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Token generation failed. Please check JWT_SECRET in environment.',
+                    error: 'JWT_ERROR',
+                    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+                });
+            }
+            
             res.status(500).json({
                 success: false,
-                message: 'Server error during login'
+                message: 'Server error during login',
+                error: 'INTERNAL_SERVER_ERROR',
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     }

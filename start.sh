@@ -152,27 +152,55 @@ check_monitoring_health() {
 check_mongodb() {
     echo -e "${CYAN}🗄️  Checking MongoDB status...${NC}"
     
-    # Check if using MongoDB Atlas (cloud) by looking at .env
-    if grep -q "mongodb+srv" "$PROJECT_ROOT/backend/.env" 2>/dev/null; then
+    # Check if .env exists and has MONGODB_URI
+    if [ ! -f "$PROJECT_ROOT/backend/.env" ]; then
+        echo -e "${RED}❌ backend/.env not found!${NC}"
+        echo -e "${YELLOW}   Please create backend/.env with MONGODB_URI${NC}"
+        echo -e "${YELLOW}   Copy from backend/.env.example and update values${NC}"
+        return 1
+    fi
+    
+    # Extract MongoDB URI from .env
+    MONGODB_URI=$(grep "^MONGODB_URI=" "$PROJECT_ROOT/backend/.env" | cut -d'=' -f2-)
+    
+    if [ -z "$MONGODB_URI" ]; then
+        echo -e "${RED}❌ MONGODB_URI not set in backend/.env${NC}"
+        echo -e "${YELLOW}   Add line: MONGODB_URI=mongodb+srv://...${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✅ MongoDB URI configured${NC}"
+    echo -e "${CYAN}   URI: ${MONGODB_URI:0:50}...${NC}"
+    
+    # Check if using MongoDB Atlas (cloud) or local MongoDB
+    if [[ $MONGODB_URI == *"mongodb+srv"* ]]; then
         echo -e "${GREEN}✅ Using MongoDB Atlas (Cloud)${NC}"
-        echo -e "${CYAN}   Testing Atlas connection...${NC}"
+        echo -e "${CYAN}   Testing internet connectivity...${NC}"
         
         # Test connectivity to MongoDB Atlas
-        if curl -s --connect-timeout 5 "https://cloud.mongodb.com" > /dev/null 2>&1; then
-            echo -e "${GREEN}✅ Internet connection available for MongoDB Atlas${NC}"
+        if timeout 5 curl -s "https://cloud.mongodb.com" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Internet connection available${NC}"
         else
-            echo -e "${YELLOW}⚠️  Cannot reach MongoDB Atlas. Check your internet connection.${NC}"
+            echo -e "${RED}❌ Cannot reach MongoDB Atlas. Check internet connection.${NC}"
+            echo -e "${YELLOW}   Also check if your IP is whitelisted in MongoDB Atlas${NC}"
+            return 1
         fi
     else
         # Local MongoDB check
+        echo -e "${GREEN}✅ Using Local MongoDB${NC}"
+        echo -e "${CYAN}   Checking if MongoDB is running...${NC}"
+        
         if systemctl is-active --quiet mongod 2>/dev/null || pgrep mongod > /dev/null 2>&1; then
             echo -e "${GREEN}✅ Local MongoDB is running${NC}"
         else
-            echo -e "${YELLOW}⚠️  Local MongoDB not running. Attempting to start...${NC}"
-            sudo systemctl start mongod 2>/dev/null || echo -e "${RED}❌ Failed to start MongoDB. Please start manually.${NC}"
+            echo -e "${YELLOW}⚠️  Local MongoDB may not be running${NC}"
+            echo -e "${YELLOW}   Start it with: sudo systemctl start mongod${NC}"
+            echo -e "${YELLOW}   Or: brew services start mongodb-community${NC}"
         fi
     fi
+    
     echo ""
+    return 0
 }
 
 # Function to start services

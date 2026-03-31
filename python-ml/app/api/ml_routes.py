@@ -1,5 +1,5 @@
 """
-ML API routes for code optimization prediction
+ML API routes for code optimization prediction with calibrated confidence scoring
 """
 
 from fastapi import APIRouter, HTTPException
@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.models.trainer import ModelTrainer
 from app.models.dataset_generator import DatasetGenerator
 from app.datasets.dataset_manager import DatasetManager
+from app.models.calibration import EnsembleVotingPredictor, calculate_confidence_level
 from datetime import datetime
 from typing import Dict, List
 import numpy as np
@@ -18,15 +19,17 @@ router = APIRouter(prefix="/ml", tags=["ML Optimization"])
 # Initialize trainer and dataset manager
 trainer = ModelTrainer()
 dataset_manager = DatasetManager()
+ensemble_predictor = EnsembleVotingPredictor("app/models/saved_models")
 
 # Load pre-trained model if available
 SELECTED_ALGORITHM_FILE = "app/models/saved_models/selected_algorithm.json"
 CURRENT_ALGORITHM = "random_forest"  # Default algorithm
 MODEL_LOADED = False
+USE_ENSEMBLE = False  # Flag to use ensemble voting when multiple models available
 
 def load_current_algorithm_model():
-    """Load the currently selected algorithm's model"""
-    global trainer, CURRENT_ALGORITHM, MODEL_LOADED
+    """Load the currently selected algorithm's model and attempt to load ensemble models"""
+    global trainer, CURRENT_ALGORITHM, MODEL_LOADED, USE_ENSEMBLE, ensemble_predictor
     
     try:
         # Check if there's a selected algorithm file
@@ -47,18 +50,38 @@ def load_current_algorithm_model():
         else:
             print(f"⚠️ No trained model found for {CURRENT_ALGORITHM}")
             MODEL_LOADED = False
+        
+        # Try to load all available models for ensemble voting
+        print(f"🔄 Loading models for ensemble voting...")
+        ensemble_predictor = EnsembleVotingPredictor("app/models/saved_models")
+        
+        algorithms = ['random_forest', 'gradient_boosting', 'xgboost', 'svm', 'logistic_regression']
+        loaded_count = 0
+        
+        for algo in algorithms:
+            if ensemble_predictor.load_model(algo, trainer):
+                loaded_count += 1
+        
+        if loaded_count > 1:
+            USE_ENSEMBLE = True
+            print(f"✅ Ensemble voting enabled with {loaded_count} models")
+        else:
+            USE_ENSEMBLE = False
+            print(f"ℹ️ Ensemble voting disabled (only {loaded_count} model(s) available)")
+    
     except Exception as e:
-        print(f"⚠️ Error loading model: {e}")
+        print(f"⚠️ Error loading models: {e}")
         MODEL_LOADED = False
+        USE_ENSEMBLE = False
 
-# Load model on startup
+# Load models on startup
 load_current_algorithm_model()
 
 
 @router.post("/predict", tags=["Prediction"])
 async def predict_code_optimization(code_metrics: Dict):
     """
-    Predict if code is optimized based on code metrics.
+    Predict if code is optimized based on code metrics with CALIBRATED CONFIDENCE SCORE.
     
     Input: Dictionary with 9 code metrics:
     - loc: Lines of code
@@ -71,7 +94,12 @@ async def predict_code_optimization(code_metrics: Dict):
     - comment_ratio: Comments / LOC
     - functions_per_class: Functions / Classes
     
-    Output: Prediction (optimized/unoptimized) with confidence score
+    Output: Prediction (optimized/unoptimized) with calibrated confidence score
+    - Uses ensemble voting when multiple models are available
+    - Confidence reflects true prediction reliability based on model agreement
+    - High confidence: All models agree and probability is extreme
+    - Medium confidence: Partial agreement or moderate probability
+    - Low confidence: Models disagree or uncertain predictions
     """
     try:
         if not MODEL_LOADED:
@@ -98,33 +126,64 @@ async def predict_code_optimization(code_metrics: Dict):
             float(code_metrics['functions_per_class'])
         ]])
         
-        # Make prediction
-        prediction, probability = trainer.predict(metrics_array)
+        # Make prediction using ensemble voting if available, else use single model
+        voting_details = None
         
-        # Get feature importance
+        if USE_ENSEMBLE:
+            try:
+                is_optimized, calibrated_confidence, voting_details = ensemble_predictor.ensemble_predict(
+                    metrics_array, CURRENT_ALGORITHM
+                )
+                confidence_level = calculate_confidence_level(calibrated_confidence)
+                feature_importance = trainer.get_feature_importance()
+                
+                return JSONResponse(content={
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "is_optimized": is_optimized,
+                    "optimization_status": "Optimized" if is_optimized else "Unoptimized",
+                    "confidence_score": float(calibrated_confidence),
+                    "confidence_percentage": f"{calibrated_confidence*100:.1f}%",
+                    "confidence_level": confidence_level,
+                    "prediction_type": "ensemble_voting",
+                    "num_models_used": voting_details.get('num_models'),
+                    "model_agreement": voting_details.get('model_agreement_percentage'),
+                    "model_votes": voting_details.get('votes'),
+                    "model_probabilities": voting_details.get('probabilities'),
+                    "input_metrics": code_metrics,
+                    "feature_importance": feature_importance,
+                    "recommendations": generate_recommendations(code_metrics, is_optimized)
+                })
+            
+            except Exception as e:
+                print(f"⚠️ Ensemble voting failed: {e}. Falling back to single model.")
+        
+        # Fallback: Single model prediction with calibrated confidence
+        is_optimized, calibrated_confidence, details = ensemble_predictor.single_model_predict(
+            metrics_array, CURRENT_ALGORITHM
+        )
+        
+        confidence_level = calculate_confidence_level(calibrated_confidence)
         feature_importance = trainer.get_feature_importance()
-        
-        # Determine optimization status
-        is_optimized = bool(prediction[0] == 1)
-        confidence = float(probability[0]) if is_optimized else float(1 - probability[0])
-        
-        # Generate recommendations
-        recommendations = generate_recommendations(code_metrics, is_optimized)
         
         return JSONResponse(content={
             "timestamp": datetime.utcnow().isoformat(),
             "is_optimized": is_optimized,
             "optimization_status": "Optimized" if is_optimized else "Unoptimized",
-            "confidence": f"{confidence:.2%}",
-            "confidence_score": float(confidence),
+            "confidence_score": float(calibrated_confidence),
+            "confidence_percentage": f"{calibrated_confidence*100:.1f}%",
+            "confidence_level": confidence_level,
+            "prediction_type": "single_model",
+            "algorithm": CURRENT_ALGORITHM,
+            "raw_probability": details.get('raw_probability'),
             "input_metrics": code_metrics,
             "feature_importance": feature_importance,
-            "recommendations": recommendations
+            "recommendations": generate_recommendations(code_metrics, is_optimized)
         })
     
     except HTTPException as e:
         raise e
     except Exception as e:
+        print(f"❌ Prediction error: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
@@ -248,7 +307,7 @@ async def get_available_algorithms():
 async def select_algorithm(request: Dict):
     """Select which algorithm to use for training and load its model"""
     try:
-        global trainer, CURRENT_ALGORITHM, MODEL_LOADED
+        global trainer, CURRENT_ALGORITHM, MODEL_LOADED, USE_ENSEMBLE, ensemble_predictor
         
         algorithm = request.get('algorithm', 'random_forest')
         
@@ -275,10 +334,22 @@ async def select_algorithm(request: Dict):
             MODEL_LOADED = False
             model_status = "not_trained"
         
+        # Reload ensemble with current state
+        ensemble_predictor = EnsembleVotingPredictor("app/models/saved_models")
+        loaded_count = 0
+        
+        for algo in valid_algorithms:
+            if ensemble_predictor.load_model(algo, trainer):
+                loaded_count += 1
+        
+        USE_ENSEMBLE = loaded_count > 1
+        
         return JSONResponse(content={
             "selected_algorithm": algorithm,
             "model_status": model_status,
-            "message": f"Algorithm switched to {algorithm}. Model status: {model_status}"
+            "ensemble_available": USE_ENSEMBLE,
+            "num_ensemble_models": loaded_count,
+            "message": f"Algorithm switched to {algorithm}. Model status: {model_status}. Ensemble: {'enabled' if USE_ENSEMBLE else 'disabled'}"
         })
     
     except HTTPException as e:

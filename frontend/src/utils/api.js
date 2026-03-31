@@ -56,4 +56,13 @@ export const projectsAPI = {
     getStatistics: (id) => api.get(`/api/projects/${id}/statistics`),
 };
 
+// History API
+export const historyAPI = {
+    save: (data) => api.post('/api/history', data),
+    getAll: (params) => api.get('/api/history', { params }),
+    getStats: () => api.get('/api/history/stats'),
+    remove: (id) => api.delete(`/api/history/${id}`),
+    clear: () => api.delete('/api/history'),
+};
+
 export default api;

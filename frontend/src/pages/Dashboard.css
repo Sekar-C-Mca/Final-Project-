@@ -240,3 +240,311 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ══════════════════════════════════════════════════
+   PREDICTION HISTORY PANEL
+══════════════════════════════════════════════════ */
+
+.history-section {
+    margin-top: var(--spacing-xl);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-xl);
+}
+
+/* ── Header ── */
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+.history-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.history-title-row h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.history-total-badge {
+    background: var(--bg-tertiary);
+    color: var(--primary-light);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.history-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.btn-icon-sm {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: var(--transition);
+}
+
+.btn-icon-sm:hover {
+    border-color: var(--primary);
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.btn-clear-history {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    border-radius: var(--radius-md);
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-clear-history:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.18);
+    border-color: #dc2626;
+}
+
+.btn-clear-history:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Stats Row ── */
+.history-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.hist-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.hist-stat svg {
+    color: var(--primary-light);
+    flex-shrink: 0;
+}
+
+.hist-stat.danger svg {
+    color: #dc2626;
+}
+
+.hist-stat strong {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+/* ── Loading / Empty ── */
+.history-loading,
+.history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-xl) 0;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ── Timeline List ── */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.history-list::-webkit-scrollbar {
+    width: 5px;
+}
+
+.history-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+}
+
+/* ── Individual Item ── */
+.history-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: var(--transition);
+}
+
+.history-item:hover {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.04);
+}
+
+.history-item-left {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    flex: 1;
+    min-width: 0;
+}
+
+.history-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+/* ── Risk Pill ── */
+.risk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* ── File Name & Meta ── */
+.history-filename {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 340px;
+}
+
+.history-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.issues-count {
+    color: #d97706;
+    font-weight: 600;
+}
+
+/* ── Algorithm Mini Badges ── */
+.algo-mini-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.algo-mini {
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+    white-space: nowrap;
+}
+
+/* ── Issues List ── */
+.history-issues {
+    margin: 5px 0 0 0;
+    padding-left: 16px;
+    list-style: none;
+}
+
+.history-issues li {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.history-issues li::before {
+    content: '';
+    margin-right: 4px;
+}
+
+/* ── Delete Button ── */
+.history-delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.history-delete-btn:hover {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.1);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .history-stats-row {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+
+    .history-filename {
+        max-width: 200px;
+    }
+
+    .history-item {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+}
