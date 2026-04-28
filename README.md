@@ -1,3 +1,268 @@
+# Predictive Code Analysis and Risk Evaluation Platform
+
+A full-stack application that predicts code risk using machine learning. Features React frontend, Express.js backend, FastAPI ML service, real-time monitoring, and multi-algorithm support.
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Project Structure](#project-structure)
+- [Setup Instructions](#setup-instructions)
+  - [Frontend Setup](#frontend-setup)
+  - [Backend Setup](#backend-setup)
+  - [ML Service Setup](#ml-service-setup)
+  - [Monitoring Agent Setup](#monitoring-agent-setup)
+- [Running the Application](#running-the-application)
+- [Testing](#testing)
+- [Technologies Used](#technologies-used)
+- [Project Features](#project-features)
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v14+) and npm
+- **Python** (v3.8+) and pip
+- **Git**
+- **MongoDB** (optional, mock DB used as fallback)
+
+## Project Structure
+
+```
+.
+├── frontend/                 # React.js UI application
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   ├── pages/           # Application pages
+│   │   ├── context/         # Context providers
+│   │   └── utils/           # Utility functions
+│   └── package.json
+├── backend/                 # Express.js server
+│   ├── routes/             # API routes
+│   ├── models/             # Database models
+│   ├── middleware/         # Auth & validation
+│   ├── config/             # Configuration files
+│   └── server.js
+├── python-ml/              # FastAPI ML service
+│   └── app/
+│       ├── api/            # ML API routes
+│       ├── models/         # ML models & training
+│       ├── preprocessing/  # Data preprocessing
+│       └── main.py
+├── monitoring-agent/       # Real-time code monitoring
+│   ├── monitor.py
+│   ├── api_client.py
+│   └── requirements.txt
+└── README.md
+```
+
+## Setup Instructions
+
+### Frontend Setup
+
+1. **Navigate to the frontend directory:**
+   ```bash
+   cd frontend
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Create environment configuration (if needed):**
+   ```bash
+   # Frontend will connect to backend on http://localhost:5000
+   ```
+
+### Backend Setup
+
+1. **Navigate to the backend directory:**
+   ```bash
+   cd backend
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Create `.env` file** (optional, for MongoDB configuration):
+   ```bash
+   MONGO_URI=mongodb://localhost:27017/code_analysis
+   JWT_SECRET=your_secret_key_here
+   PORT=5000
+   ```
+
+4. **Test MongoDB connection** (if using MongoDB):
+   ```bash
+   node test_mongo.js
+   ```
+
+### ML Service Setup
+
+1. **Navigate to the ML service directory:**
+   ```bash
+   cd python-ml
+   ```
+
+2. **Create a Python virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate    # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install Python dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+   Or install manually:
+   ```bash
+   pip install fastapi uvicorn scikit-learn xgboost pandas numpy
+   ```
+
+### Monitoring Agent Setup
+
+1. **Navigate to the monitoring agent directory:**
+   ```bash
+   cd monitoring-agent
+   ```
+
+2. **Create a Python virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate    # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Running the Application
+
+### Quick Start (Automated)
+
+Use the provided shell scripts:
+
+```bash
+# Start all services
+./start.sh
+```
+
+### Manual Start
+
+**Terminal 1 - Backend (Express.js):**
+```bash
+cd backend
+npm start
+# Server runs on http://localhost:5000
+```
+
+**Terminal 2 - ML Service (FastAPI):**
+```bash
+cd python-ml
+source venv/bin/activate
+python app/main.py
+# ML service runs on http://localhost:8000
+```
+
+**Terminal 3 - Frontend (React):**
+```bash
+cd frontend
+npm run dev
+# Frontend runs on http://localhost:5173 (Vite default)
+```
+
+**Terminal 4 - Monitoring Agent (Optional):**
+```bash
+cd monitoring-agent
+source venv/bin/activate
+python monitor.py
+```
+
+### Access the Application
+
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:5000
+- **ML Service:** http://localhost:8000/docs (Swagger UI)
+
+## Testing
+
+### Backend Tests
+
+```bash
+cd backend
+npm test
+```
+
+### ML Service Tests
+
+```bash
+cd python-ml
+source venv/bin/activate
+python -m pytest tests/
+```
+
+### Monitoring Agent Tests
+
+```bash
+cd monitoring-agent
+source venv/bin/activate
+python test_agent.py
+```
+
+## Technologies Used
+
+- **Frontend:** React.js, Vite, CSS3
+- **Backend:** Express.js, Node.js, MongoDB
+- **ML Service:** FastAPI, Python, scikit-learn, XGBoost
+- **Monitoring:** Python watchdog, real-time file monitoring
+- **Authentication:** JWT tokens
+- **Data Format:** JSON, CSV
+
+## Project Features
+
+- **Code Risk Prediction:** ML models predict code risk from static metrics
+- **Multi-Algorithm Support:** Switch between Random Forest, XGBoost, SVM, Logistic Regression
+- **Real-time Monitoring:** Watch folders and analyze code changes automatically
+- **Authentication:** Secure user registration and login
+- **Project Management:** Create and manage multiple projects
+- **Model Training:** Retrain models with new data
+- **Dashboard:** Visual insights and risk analysis
+- **Deployment Helper:** Scripts to assist in code deployment
+
+## Common Issues
+
+### Port Already in Use
+
+If a port is already in use, modify the port in respective config files:
+- Backend: `backend/server.js` - Change `PORT` variable
+- Frontend: `frontend/vite.config.js` - Change port in server config
+- ML Service: `python-ml/app/main.py` - Change port in uvicorn.run()
+
+### MongoDB Connection Issues
+
+If MongoDB is not available, the app will use a mock database. To use real MongoDB:
+
+1. Install MongoDB locally or use MongoDB Atlas
+2. Update connection string in `backend/.env`
+
+### Python Module Import Errors
+
+Ensure you've activated the virtual environment:
+
+```bash
+source venv/bin/activate    # Linux/Mac
+venv\Scripts\activate       # Windows
+```
+
+---
+
+## License
+
+This project is part of a Final Year MCA Project.
+
 # Project Report Prompt Pack (LLM-Ready)
 
 Use these prompts section-by-section to generate your final report content.
