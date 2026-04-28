@@ -266,38 +266,6 @@ class DataProcessor:
                     </div>
                 )}
 
-                {/* Feature Importance from Current ML Model */}
-                {analysisResult?.feature_importance && (
-                    <div className="importance-section card">
-                        <h2>
-                            <BarChart3 size={24} />
-                            Feature Importance Analysis (Live from ML Model)
-                        </h2>
-                        <div className="importance-grid">
-                            {Object.entries(analysisResult.feature_importance)
-                                .sort(([,a], [,b]) => b - a)
-                                .slice(0, 5)
-                                .map(([feature, importance]) => (
-                                <div key={feature} className="importance-item">
-                                    <div className="importance-bar">
-                                        <div className="importance-label">{feature}</div>
-                                        <div className="importance-visual">
-                                            <div 
-                                                className="importance-fill" 
-                                                style={{ width: `${importance * 100}%` }}
-                                            ></div>
-                                        </div>
-                                        <div className="importance-value">{(importance * 100).toFixed(1)}%</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <p className="text-muted" style={{ marginTop: '1rem' }}>
-                            Feature importance values from the currently selected ML algorithm
-                        </p>
-                    </div>
-                )}
-
                 {/* Code Quality Analysis */}
                 {analysisResult?.code_analysis && (
                     <div className="quality-section card">
