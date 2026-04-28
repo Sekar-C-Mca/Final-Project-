@@ -2,6 +2,19 @@
 
 A full-stack application that predicts code risk using machine learning. Features React frontend, Express.js backend, FastAPI ML service, real-time monitoring, and multi-algorithm support.
 
+## ⚡ Quick Start
+
+Run the entire project with a single command:
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+This script automatically sets up and starts all services (backend, frontend, ML service, and monitoring agent).
+
+---
+
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
